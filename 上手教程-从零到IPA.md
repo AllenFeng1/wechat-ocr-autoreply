@@ -249,6 +249,7 @@ Header: Content-Type: application/json
 
 | 现象 | 原因 / 解法 |
 |---|---|
+| Actions 显示 **"No workflows found"** | workflow 文件放错了位置——GitHub 只读仓库**根目录**的 `.github/workflows/`，已修复（文件必须在 `wechat-ocr-autoreply/.github/workflows/build-ipa.yml`，不在 `ios/` 里）。若你的仓库还是旧结构，把 `ios/.github` 整个删掉、确认根目录有 `.github/workflows/build-ipa.yml` 再推一次 |
 | Actions 构建红叉 | 点进日志看哪步红的。大概率：①免费账号没勾 `free_account` → 重新 Run workflow 勾上；②Bundle ID 撞名 → 改 `ios/project.yml` 的 `bundleIdPrefix` |
 | AltServer 装 AltStore 时报错 | 缺 Apple 官网版 iCloud for Windows（不是应用商店版）；或 Apple ID 开了双重认证要用 App 专用密码 |
 | 装好 IPA 打不开 | 去 设置→通用→VPN与设备管理 信任证书（免费证书每次重装都要重新信任） |
