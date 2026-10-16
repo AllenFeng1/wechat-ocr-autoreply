@@ -14,7 +14,7 @@ final class OCRPipeline {
     /// 帧节流：最多每秒处理 1 帧
     private let minFrameInterval: TimeInterval = 1.0
     private let queue = DispatchQueue(label: "com.wechatocr.pipeline")
-    private let logger = Logger(subsystem: "com.example.wechatocr.broadcast", category: "pipeline")
+    private let logger = Logger(subsystem: "com.allenfeng1.wechatocr.broadcast", category: "pipeline")
 
     private var running = false
     private var lastFrameTime = Date.distantPast

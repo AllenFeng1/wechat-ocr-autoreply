@@ -5,7 +5,7 @@ import ReplayKit
 /// 全屏视频帧经 OCRPipeline 处理后送 Vision OCR，再上传后端。
 class SampleHandler: RPBroadcastSampleHandler {
     private let pipeline = OCRPipeline()
-    private let logger = Logger(subsystem: "com.example.wechatocr.broadcast", category: "sample")
+    private let logger = Logger(subsystem: "com.allenfeng1.wechatocr.broadcast", category: "sample")
 
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
         logger.info("WeChatOCR broadcast started")

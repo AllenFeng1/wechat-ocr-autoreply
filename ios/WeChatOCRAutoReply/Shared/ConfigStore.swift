@@ -4,7 +4,7 @@ import Foundation
 /// 注意：App Group 需要付费 Apple 开发者账号；未配置时回退到各自进程的
 /// standard defaults（扩展将使用默认配置运行，主 App 的修改不会同步）。
 public enum ConfigStore {
-    public static let appGroupSuite = "group.com.example.wechatocr"
+    public static let appGroupSuite = "group.com.allenfeng1.wechatocr"
     private static let configKey = "app_config_v1"
 
     public static var defaults: UserDefaults {

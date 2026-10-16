@@ -11,13 +11,13 @@
 ### A. 云构建（推荐，不需要 Mac）
 
 1. 把整个 `wechat-ocr-autoreply` 目录推到 GitHub（公开仓库免费；私有仓库每月 2000 分钟免费额度，够用）
-2. 推送即自动触发 `.github/workflows/build-ipa.yml`；也可在仓库 Actions 页面点 **Run workflow**
+2. 在仓库 Actions 页面点 **Run workflow** 手动构建（**免费 Apple ID 必须勾选 `free_account`**；不监听 push 自动触发——自动触发无法区分账号类型，默认配置产出的 IPA 免费账号用不了）
 3. 构建成功后下载 artifact：`WeChatOCRAutoReply-unsigned-ipa`
 4. 安装到 iPhone：
    - Windows 装 [AltStore](https://altstore.io/)（免费，支持 Windows）
    - iPhone 装 AltStore（同 Apple ID 免费证书，7 天有效，到期 AltStore 一键续期）
    - AltStore → 左上 `+` → 选下载的 `WeChatOCRAutoReply-unsigned.ipa` → 安装
-5. **免费 Apple ID** 用不了 App Group：手动触发 workflow 时勾选 `free_account` 选项（等价于本地 `xcodegen -p project.freeaccount.yml`）。该模式下录屏扩展读不到主 App 的设置，使用代码默认服务器地址（改 `Shared/SharedTypes.swift` 里 `AppConfig.default.serverURL`）
+5. **免费 Apple ID** 用不了 App Group：手动触发 workflow 时勾选 `free_account` 选项（等价于本地 `cp project.freeaccount.yml project.yml && xcodegen generate`）。该模式下录屏扩展读不到主 App 的设置，使用代码默认服务器地址（改 `Shared/SharedTypes.swift` 里 `AppConfig.default.serverURL`）
 
 ### B. Mac 一键脚本
 
@@ -43,7 +43,7 @@ cd ios && xcodegen generate && open WeChatOCRAutoReply.xcodeproj
 - 真机一台（iOS 16+），**录屏广播扩展只能在真机测试**
 - 账号分两种：
   - **付费开发者账号（$99/年）**：完整功能。需要在开发者后台创建 App Group：`group.com.example.wechatocr`（或改成你的 prefix）
-  - **免费个人账号**：不能用 App Group。生成工程时用 `xcodegen -p project.freeaccount.yml`（已准备好），扩展会用默认配置运行，服务器地址写死在 `Shared/SharedTypes.swift` 的 `AppConfig.default` 里
+  - **免费个人账号**：不能用 App Group。生成工程前先 `cp project.freeaccount.yml project.yml`（spec 已准备好），扩展会用默认配置运行，服务器地址写死在 `Shared/SharedTypes.swift` 的 `AppConfig.default` 里
 
 ## 2. 生成并打开工程
 

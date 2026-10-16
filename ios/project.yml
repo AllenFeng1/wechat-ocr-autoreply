@@ -1,6 +1,6 @@
 name: WeChatOCRAutoReply
 options:
-  bundleIdPrefix: com.example
+  bundleIdPrefix: com.allenfeng1
   deploymentTarget:
     iOS: "16.0"
   createIntermediateGroups: true
@@ -17,7 +17,7 @@ targets:
       - target: BroadcastExtension
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.wechatocr
+        PRODUCT_BUNDLE_IDENTIFIER: com.allenfeng1.wechatocr
         INFOPLIST_FILE: WeChatOCRAutoReply/App/Info.plist
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.9"
@@ -34,7 +34,7 @@ targets:
       - path: WeChatOCRAutoReply/Shared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.wechatocr.broadcast
+        PRODUCT_BUNDLE_IDENTIFIER: com.allenfeng1.wechatocr.broadcast
         INFOPLIST_FILE: WeChatOCRAutoReply/Broadcast/Info.plist
         SWIFT_VERSION: "5.9"
         GENERATE_INFOPLIST_FILE: "NO"
