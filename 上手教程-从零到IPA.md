@@ -138,6 +138,17 @@ AltStore 的作用：**用你的免费 Apple ID 给 IPA 签名，实现 7 天有
 C:\Users\Administrator\.workbuddy\binaries\python\envs\default\Scripts\python.exe main.py
 ```
 
+- 首次运行 Windows 会弹防火墙对话框，**必须勾选"专用网络"**，否则 iPhone 连不上
+- 看到 `Uvicorn running on http://0.0.0.0:8000` 就是成功了
+- 已为你准备好 `server/.env`：LLM key 留空 = **Mock 模式**（返回固定假回复，不需要任何 AI 账号就能验证整条链路）；活跃时段设为全天、间隔 5 秒，方便连续测试。链路验证通过后，在 `.env` 里填上真实 key（默认 DeepSeek）即切回真实回复
+- ⚠️ **你的 Windows 用户环境变量里已有一个 `LLM_API_KEY`（DeepSeek 已返回 401 无效）**。环境变量优先级高于 `.env`，服务器会优先读它，导致拿不到回复。启动前先清掉它（PowerShell）：
+  ```powershell
+  $env:LLM_API_KEY=""
+  C:\Users\Administrator\.workbuddy\binaries\python\envs\default\Scripts\python.exe main.py
+  ```
+  要永久删除：`[Environment]::SetEnvironmentVariable('LLM_API_KEY',$null,'User')`（需重开终端）
+- 浏览器打开 `http://127.0.0.1:8000/health` 应返回 `{"status":"ok","llm_mode":"mock",...}`
+
 启动后默认监听 `0.0.0.0:8000`。`LLM_API_KEY` 留空时自动用内置 Mock 回复（固定话术），足够验证"OCR → 上传 → 回复"整条链路。
 
 ### 选择 2：直接对接你自己的后端
@@ -253,6 +264,7 @@ Header: Content-Type: application/json
 | "Generate Xcode project" 步骤秒失败（红叉） | workflow 里 XcodeGen 命令写法问题（历史 bug，已修复为 `cp project.freeaccount.yml project.yml` + `xcodegen generate`）。若再遇到：确认 `.github/workflows/build-ipa.yml` 在仓库根目录、Generate 步骤是 cp 写法 |
 | Actions 构建红叉 | 点进日志看哪步红的。大概率：①免费账号没勾 `free_account` → 重新 Run workflow 勾上；②Bundle ID 撞名 → 改 `ios/project.yml` 的 `bundleIdPrefix` |
 | AltServer 装 AltStore 时报错 | 缺 Apple 官网版 iCloud for Windows（不是应用商店版）；或 Apple ID 开了双重认证要用 App 专用密码 |
+| AltStore 安装 IPA 时报 **MissingBundleNameString** | app 的 Info.plist 缺 `CFBundleName` 键（历史 bug，两个 plist 已补齐所有标准键并修复）。若再遇到：确认 `App/Info.plist` 和 `Broadcast/Info.plist` 里都有 CFBundleName |
 | 装好 IPA 打不开 | 去 设置→通用→VPN与设备管理 信任证书（免费证书每次重装都要重新信任） |
 | 提示"无法验证 App" | 证书过期，AltStore 里刷新；或重新装一次 |
 | 录屏列表里没有 WeChatOCR | 扩展没装成功/没被系统识别。重装 IPA，装完先打开一次主 App |

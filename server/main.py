@@ -37,17 +37,18 @@ def create_app(llm=None, active_hours: tuple[int, int] | None = None) -> FastAPI
     ah_start, ah_end = active_hours or (settings.active_hour_start, settings.active_hour_end)
 
     if llm is None:
-        llm = (
-            LLMClient(settings.llm_api_key, settings.llm_base_url, settings.llm_model, settings.persona)
-            if settings.llm_ready
-            else None
-        )
+        if settings.llm_ready:
+            llm = LLMClient(settings.llm_api_key, settings.llm_base_url, settings.llm_model, settings.persona)
+        else:
+            # 未配置 LLM key：用 MockLLM 跑通整条链路（首次联调时手机上能看到通知/剪贴板效果）
+            logger.warning("LLM_API_KEY 未配置，使用 MockLLM（返回固定假回复，仅用于联调）")
+            llm = MockLLM()
 
     @app.get("/health")
     def health() -> dict:
         return {
             "status": "ok",
-            "llm_ready": llm is not None,
+            "llm_mode": "mock" if isinstance(llm, MockLLM) else "live",
             "today_replies": None,  # 按 device 维度，见 /api/v1/config
         }
 
@@ -100,3 +101,10 @@ def create_app(llm=None, active_hours: tuple[int, int] | None = None) -> FastAPI
 
 
 app = create_app()
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    s = get_settings()
+    uvicorn.run(app, host=s.host, port=s.port)

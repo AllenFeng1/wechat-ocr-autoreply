@@ -7,6 +7,7 @@ import sys
 from fastapi.testclient import TestClient
 
 from main import create_app
+from config import get_settings
 from llm import MockLLM
 from rate_limiter import in_active_hours
 from datetime import datetime
@@ -81,7 +82,11 @@ def main() -> int:
     # ---- 配置查看 ----
     r = client.get("/api/v1/config")
     cfg = r.json()
-    check("config 返回白名单与限额", "王五" in cfg["whitelist"] and cfg["max_replies_per_hour"] == 20, str(cfg))
+    # 与当前配置（.env）比对，避免硬编码默认值：改 .env 后测试依然成立
+    settings = get_settings()
+    check("config 返回白名单与限额",
+          "王五" in cfg["whitelist"] and cfg["max_replies_per_hour"] == settings.max_replies_per_hour,
+          str(cfg))
 
     # ---- 活跃时段 ----
     check("活跃时段 09:00 在范围内", in_active_hours(8, 23, datetime(2026, 10, 17, 9, 0)))
