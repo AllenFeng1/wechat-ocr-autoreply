@@ -1,0 +1,42 @@
+name: WeChatOCRAutoReply
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+targets:
+  WeChatOCRAutoReply:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: WeChatOCRAutoReply/App
+      - path: WeChatOCRAutoReply/Shared
+    dependencies:
+      - target: BroadcastExtension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.wechatocr
+        INFOPLIST_FILE: WeChatOCRAutoReply/App/Info.plist
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: "NO"
+    entitlements:
+      path: WeChatOCRAutoReply/App/WeChatOCRAutoReply.entitlements
+
+  BroadcastExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: WeChatOCRAutoReply/Broadcast
+      - path: WeChatOCRAutoReply/Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.wechatocr.broadcast
+        INFOPLIST_FILE: WeChatOCRAutoReply/Broadcast/Info.plist
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: "NO"
+    entitlements:
+      path: WeChatOCRAutoReply/Broadcast/BroadcastExtension.entitlements

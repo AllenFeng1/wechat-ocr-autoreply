@@ -1,0 +1,67 @@
+name: build-ipa
+
+# 推送到 ios/ 目录改动时自动构建；也可在 Actions 页面手动 "Run workflow"
+on:
+  workflow_dispatch:
+    inputs:
+      free_account:
+        description: "使用免费 Apple ID 配置（无 App Group，扩展用默认配置）"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - ".github/workflows/build-ipa.yml"
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: |
+          if [ "${{ inputs.free_account }}" = "true" ]; then
+            xcodegen -p project.freeaccount.yml
+          else
+            xcodegen generate
+          fi
+
+      - name: Build archive (unsigned)
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project WeChatOCRAutoReply.xcodeproj \
+            -scheme WeChatOCRAutoReply \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath build/WeChatOCRAutoReply.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Package unsigned IPA
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          rm -rf Payload build/Payload
+          mkdir -p Payload
+          cp -R build/WeChatOCRAutoReply.xcarchive/Products/Applications/WeChatOCRAutoReply.app Payload/
+          zip -qry WeChatOCRAutoReply-unsigned.ipa Payload
+          rm -rf Payload
+          ls -lh WeChatOCRAutoReply-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WeChatOCRAutoReply-unsigned-ipa
+          path: ios/WeChatOCRAutoReply-unsigned.ipa
+          if-no-files-found: error

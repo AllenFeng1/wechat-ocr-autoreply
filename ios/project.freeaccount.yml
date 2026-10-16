@@ -1,0 +1,46 @@
+# 免费 Apple 开发者账号专用配置（无 App Group）
+#
+# 用法：xcodegen -p project.freeaccount.yml
+#
+# 与 project.yml 的唯一区别：去掉了 entitlements（App Group 需要付费账号）。
+# 该模式下录屏扩展读不到主 App 的配置，会使用代码里的默认配置
+# （Shared/SharedTypes.swift 中 AppConfig.default.serverURL），
+# 把服务器地址直接写死在那里即可。
+name: WeChatOCRAutoReply
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+targets:
+  WeChatOCRAutoReply:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: WeChatOCRAutoReply/App
+      - path: WeChatOCRAutoReply/Shared
+    dependencies:
+      - target: BroadcastExtension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.wechatocr
+        INFOPLIST_FILE: WeChatOCRAutoReply/App/Info.plist
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: "NO"
+
+  BroadcastExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: WeChatOCRAutoReply/Broadcast
+      - path: WeChatOCRAutoReply/Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.wechatocr.broadcast
+        INFOPLIST_FILE: WeChatOCRAutoReply/Broadcast/Info.plist
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: "NO"
