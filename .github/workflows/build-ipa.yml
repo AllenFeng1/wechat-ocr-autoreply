@@ -36,6 +36,7 @@ jobs:
         working-directory: ios
         run: |
           set -euo pipefail
+          # tee 到 build.log：失败时上传为 artifact，方便定位（见下方 Upload build log 步骤）
           xcodebuild \
             -project WeChatOCRAutoReply.xcodeproj \
             -scheme WeChatOCRAutoReply \
@@ -45,8 +46,16 @@ jobs:
             archive \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM=""
+            CODE_SIGN_IDENTITY="-" \
+            DEVELOPMENT_TEAM="" 2>&1 | tee build.log
+
+      - name: Upload build log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ios/build.log
+          if-no-files-found: ignore
 
       - name: Package unsigned IPA
         working-directory: ios

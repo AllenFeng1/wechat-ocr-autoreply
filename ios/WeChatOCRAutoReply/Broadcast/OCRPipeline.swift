@@ -1,6 +1,7 @@
 import Foundation
 import OSLog
 import ReplayKit
+import UIKit
 import Vision
 
 /// OCR 流水线：帧节流 → Vision 中文识别 → 文本去重 → 上传后端 → 写共享存储 + 剪贴板 + 本地通知。
