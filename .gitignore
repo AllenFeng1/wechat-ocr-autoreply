@@ -11,3 +11,6 @@ xcuserdata/
 
 # 本地 preflight 类型检查的中间产物
 build/
+
+# zxtouch deb（越狱触摸服务，二进制不进 git，可随时从 GitHub releases 重下）
+zxtouch-deb/*.deb
