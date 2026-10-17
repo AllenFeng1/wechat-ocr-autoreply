@@ -22,9 +22,20 @@
 
 ### 方式 A：Filza 文件管理器（推荐，不用电脑）
 
-1. 把对应 deb 传到手机（微信文件传输助手 / QQ / AirDrop 均可）
-2. 手机上用 Filza 打开这个 deb 文件 → 右上角「安装」
-3. 等 SpringBoard 重启，桌面出现 **ZXTouch** App 图标
+**0. 先装 Filza**（如果手机上还没有）：
+1. 打开 **Sileo**（越狱工具自带，桌面上蓝白色图标）
+2. 底部「搜索」→ 输入 `Filza`
+3. 安装 **Filza File Manager 64-bit**（免费版即可，作者 TigiSoftware）
+4. 搜不到或提示不兼容你的系统：Sileo → 更多 → 源管理 → 编辑 → 添加
+   `https://tigisoftware.com/cydia/` → 刷新后再搜 Filza
+   （iOS 15–18 的 rootless/roothide 越狱需要 Filza 3.8.9 以上版本）
+
+**1. 传 deb 到手机**：微信文件传输助手 / QQ / AirDrop 均可
+
+**2. 用 Filza 安装**：
+1. Filza 里找到刚传进来的 deb（一般在「最近项目」或 `/var/mobile/Documents`）
+2. 点一下这个 deb 文件 → 右上角 **「Install」**
+3. 等进度条走完、SpringBoard 自动重启 → 桌面出现 **ZXTouch** App 图标即成功
 
 ### 方式 B：SSH + dpkg
 
