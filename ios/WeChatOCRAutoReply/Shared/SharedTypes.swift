@@ -21,6 +21,13 @@ public struct AppConfig: Codable, Equatable {
     public var deviceId: String
     /// 会话绑定表：微信会话名 → 后端好友档案 id（仿 PC 端 backend_friends）
     public var friendBindings: [String: Int]
+    /// 自动发送总开关（越狱机 + zxtouch 已安装才有效；关闭时维持"通知+人工粘贴"）
+    public var autoSendEnabled: Bool
+    /// 自动发送随机延迟区间（秒）：拟人化，避免秒回被风控
+    public var autoSendDelayMin: Double
+    public var autoSendDelayMax: Double
+    /// 自动发送点击坐标（归一化 0-1，由校准页录入）
+    public var touchPoints: TouchPoints
 
     public static let `default` = AppConfig(
         serverURL: "https://chat.anamne.top",
@@ -31,13 +38,19 @@ public struct AppConfig: Codable, Equatable {
         enabled: true,
         minIntervalSeconds: 5,
         deviceId: UUID().uuidString,
-        friendBindings: [:]
+        friendBindings: [:],
+        autoSendEnabled: false,
+        autoSendDelayMin: 1.5,
+        autoSendDelayMax: 5.0,
+        touchPoints: .default
     )
 
     public init(
         serverURL: String, apiToken: String, username: String, password: String,
         whitelist: [String], enabled: Bool, minIntervalSeconds: Int,
-        deviceId: String, friendBindings: [String: Int]
+        deviceId: String, friendBindings: [String: Int],
+        autoSendEnabled: Bool = false, autoSendDelayMin: Double = 1.5,
+        autoSendDelayMax: Double = 5.0, touchPoints: TouchPoints = .default
     ) {
         self.serverURL = serverURL
         self.apiToken = apiToken
@@ -48,6 +61,10 @@ public struct AppConfig: Codable, Equatable {
         self.minIntervalSeconds = minIntervalSeconds
         self.deviceId = deviceId
         self.friendBindings = friendBindings
+        self.autoSendEnabled = autoSendEnabled
+        self.autoSendDelayMin = autoSendDelayMin
+        self.autoSendDelayMax = autoSendDelayMax
+        self.touchPoints = touchPoints
     }
 
     /// 去掉结尾斜杠，避免拼出 //api/...
@@ -68,8 +85,40 @@ public struct AppConfig: Codable, Equatable {
         minIntervalSeconds = try c.decodeIfPresent(Int.self, forKey: .minIntervalSeconds) ?? 5
         deviceId = try c.decodeIfPresent(String.self, forKey: .deviceId) ?? UUID().uuidString
         friendBindings = try c.decodeIfPresent([String: Int].self, forKey: .friendBindings) ?? [:]
+        autoSendEnabled = try c.decodeIfPresent(Bool.self, forKey: .autoSendEnabled) ?? false
+        autoSendDelayMin = try c.decodeIfPresent(Double.self, forKey: .autoSendDelayMin) ?? d.autoSendDelayMin
+        autoSendDelayMax = try c.decodeIfPresent(Double.self, forKey: .autoSendDelayMax) ?? d.autoSendDelayMax
+        touchPoints = try c.decodeIfPresent(TouchPoints.self, forKey: .touchPoints) ?? .default
     }
 }
+
+// MARK: - 自动发送的屏幕坐标（归一化 0-1；由主 App 校准页录入，跨机型通用）
+
+public struct TouchPoints: Codable, Equatable {
+    /// 微信聊天页底部输入框中心
+    public var inputBox: CGPoint
+    /// 键盘弹出后的"发送"键中心
+    public var sendButton: CGPoint
+
+    public static let `default` = TouchPoints(
+        // 初值按 1242x2688 实拍估算（图4键盘弹出态）：输入栏 ≈ y 0.82，发送键 ≈ (0.91, 0.955)
+        inputBox: CGPoint(x: 0.50, y: 0.825),
+        sendButton: CGPoint(x: 0.905, y: 0.955)
+    )
+
+    public init(inputBox: CGPoint, sendButton: CGPoint) {
+        self.inputBox = inputBox
+        self.sendButton = sendButton
+    }
+
+    /// 是否已校准（还是默认估算值）
+    public var isCalibrated: Bool {
+        self != TouchPoints.default
+    }
+}
+
+/// 微信 bundle id（switch_to_app 用）
+public let weChatBundleId = "com.tencent.xin"
 
 // MARK: - 后端好友档案（GET /api/friends 的元素形状）
 

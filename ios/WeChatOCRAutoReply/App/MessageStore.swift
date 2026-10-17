@@ -27,6 +27,15 @@ final class MessageStore: ObservableObject {
         friends = ConfigStore.shared.cachedFriends()
         reload()
 
+        // 自动发送阶段变化（引擎单例回调 → UI）
+        AutoSendEngine.shared.onPhase = { [weak self] phase, message in
+            self?.autoSendPhase = phase
+            self?.autoSendMessage = message
+            if phase == .done || phase == .failed {
+                self?.autoSendRunning = false
+            }
+        }
+
         // 录屏扩展写入共享数据后，主 App 通过信号时间戳感知并刷新（2s 轮询，简单可靠）
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             guard let self else { return }
@@ -35,7 +44,70 @@ final class MessageStore: ObservableObject {
                 self.lastSignal = signal
                 self.reload()
             }
+            self.drainPendingSends()
         }
+    }
+
+    // MARK: - 自动发送（越狱 + zxtouch）
+
+    @Published var autoSendPhase: AutoSendEngine.Phase = .idle
+    @Published var autoSendMessage = ""
+    @Published var autoSendRunning = false
+
+    /// 把排队里的待发送逐条交给引擎。引擎忙就等下一轮轮询（2s）。
+    private func drainPendingSends() {
+        guard config.autoSendEnabled, !autoSendRunning else { return }
+        let pending = PendingSendBus.consume()
+        guard let first = pending.first else { return }
+        // 一次只发一条；没发完的留在队列里等下一轮
+        if pending.count > 1 {
+            PendingSendBus.post(contentsOf: pending.dropFirst())
+        }
+        autoSendRunning = true
+        AutoSendEngine.shared.onPhase = { [weak self] phase, message in
+            self?.autoSendPhase = phase
+            self?.autoSendMessage = message
+            if phase == .done || phase == .failed {
+                self?.autoSendRunning = false
+                if phase == .done {
+                    self?.reportAutoSent(session: first.session, friendId: first.friendId)
+                } else {
+                    // 失败兜底：通知用户手动粘贴（剪贴板里已有回复内容）
+                    self?.status = "自动发送失败：\(message)（回复已在剪贴板，可手动粘贴）"
+                }
+            }
+        }
+        let ok = AutoSendEngine.shared.start(
+            AutoSendEngine.PendingSend(session: first.session, reply: first.reply,
+                                       friendId: first.friendId),
+            config: config)
+        if !ok {
+            autoSendRunning = false
+            if pending.count > 1 {
+                PendingSendBus.post(contentsOf: pending.dropFirst())
+            }
+        }
+    }
+
+    /// 自动发送成功：回传 outcome=sent 给后端（与手动发送同语义）
+    private func reportAutoSent(session: String, friendId: Int) {
+        let suggestion = ReplySuggestion(session: session, friendId: friendId,
+                                         reply: "", outcome: "sent")
+        reportOutcome(suggestion, action: "sent")
+    }
+
+    /// 设置页「测试触摸」：连一下 zxtouch 服务通不通
+    func testTouchService(completion: @escaping (Bool, String) -> Void) {
+        ZXTouchClient.shared.connect { ok in
+            completion(ok, ok ? "zxtouch 服务可用（127.0.0.1:6000）"
+                              : "连不上：请确认已安装 zxtouch tweak 且允许本地网络访问")
+        }
+    }
+
+    /// 保存校准坐标（校准页调用）
+    func saveTouchPoints(_ points: TouchPoints) {
+        config.touchPoints = points
+        saveConfig()
     }
 
     func reload() {

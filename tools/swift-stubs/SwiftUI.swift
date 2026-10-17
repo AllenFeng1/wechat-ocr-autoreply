@@ -123,14 +123,24 @@ public struct Binding<Value> {
 
 @propertyWrapper
 public struct State<Value> {
-    public var wrappedValue: Value
+    // 引用盒 + nonmutating setter：逃逸闭包里也能赋值（真实 SwiftUI 同原理）
+    private final class Box {
+        var value: Value
+        init(_ value: Value) { self.value = value }
+    }
+    private let box: Box
+
+    public var wrappedValue: Value {
+        get { box.value }
+        nonmutating set { box.value = newValue }
+    }
 
     public init(wrappedValue thunk: @autoclosure @escaping () -> Value) {
-        wrappedValue = thunk()
+        box = Box(thunk())
     }
 
     public var projectedValue: Binding<Value> {
-        Binding(get: { fatalError() }, set: { _ in })
+        Binding(get: { box.value }, set: { box.value = $0 })
     }
 }
 
@@ -245,6 +255,10 @@ public struct Spacer: View {
 public struct Section<Header: View, Content: View, Footer: View>: View {
     public init(header: () -> Header, @ViewBuilder content: () -> Content,
                 @ViewBuilder footer: () -> Footer) {}
+    /// `Section { } header: { } footer: { }` 形式
+    public init(@ViewBuilder content: () -> Content,
+                @ViewBuilder header: () -> Header,
+                @ViewBuilder footer: () -> Footer) {}
 }
 
 extension Section where Header == Never, Footer == Never {
@@ -311,6 +325,8 @@ public struct Toggle: View {
 
 public struct Stepper: View {
     public init(_ title: String, value: Binding<Int>, in: ClosedRange<Int>) {}
+    public init(_ title: String, value: Binding<Double>, in: ClosedRange<Double>,
+                step: Double = 1) {}
 }
 
 // MARK: - 颜色 / 形状样式
@@ -345,7 +361,7 @@ extension ShapeStyle where Self == Color {
 
 public struct HierarchicalShapeStyle: ShapeStyle {}
 
-public struct Color: ShapeStyle {
+public struct Color: ShapeStyle, View {
     public static let red = Color()
     public static let orange = Color()
     public static let yellow = Color()
@@ -542,6 +558,29 @@ extension View {
     public func toolbar<Content: View>(@ViewBuilder content: () -> Content) -> AnyView {
         AnyView(self)
     }
+    public func foregroundStyle<S: ShapeStyle>(_ style: S) -> AnyView { AnyView(self) }
+    public func onTapGesture(count: Int = 1, perform: @escaping () -> Void) -> AnyView {
+        AnyView(self)
+    }
+    public func onTapGesture(count: Int = 1, coordinateSpace: CoordinateSpace,
+                             perform: @escaping (CGPoint) -> Void) -> AnyView {
+        AnyView(self)
+    }
+    public func contentShape<S: Shape>(_ shape: S) -> AnyView { AnyView(self) }
+    public func sheet<Content: View>(isPresented: Binding<Bool>,
+                                     @ViewBuilder content: @escaping () -> Content) -> AnyView {
+        AnyView(self)
+    }
+    public func fullScreenCover<Content: View>(isPresented: Binding<Bool>,
+                                               @ViewBuilder content: @escaping () -> Content) -> AnyView {
+        AnyView(self)
+    }
+    public func interactiveDismissDisabled(_ disabled: Bool = true) -> AnyView { AnyView(self) }
+    public func presentationDetents(_ detents: Set<PresentationDetent>) -> AnyView { AnyView(self) }
+    public func listRowSeparator(_ visibility: Visibility) -> AnyView { AnyView(self) }
+    public func scrollDismissesKeyboard(_ mode: ScrollDismissesKeyboardMode) -> AnyView {
+        AnyView(self)
+    }
     public func tag<V>(_ tag: V) -> AnyView { AnyView(self) }
     public func onChange<V: Equatable>(of value: V, _ action: @escaping (V) -> Void) -> AnyView {
         AnyView(self)
@@ -550,4 +589,85 @@ extension View {
                                        _ action: @escaping () -> Void) -> AnyView {
         AnyView(self)
     }
+}
+
+// MARK: - 布局与手势辅助（校准页用）
+
+public struct GeometryProxy {
+    public var size: CGSize { CGSize(width: 390, height: 844) }
+    public func frame(in coordinateSpace: CoordinateSpace) -> CGRect {
+        CGRect(origin: .zero, size: size)
+    }
+}
+
+public struct GeometryReader<Content: View>: View {
+    private let content: (GeometryProxy) -> Content
+    public init(@ViewBuilder content: @escaping (GeometryProxy) -> Content) {
+        self.content = content
+    }
+}
+
+public struct CoordinateSpace {
+    public static let global = CoordinateSpace()
+    public static let local = CoordinateSpace()
+    public init() {}
+}
+
+public enum ScrollDismissesKeyboardMode { case automatic, never, always }
+public enum Visibility { case automatic, visible, hidden }
+public struct PresentationDetent { public static let medium = PresentationDetent() }
+public enum NavigationBarItemTitleDisplayMode { case automatic, inline, large }
+public enum NavigationBarTitleDisplayMode { case automatic, inline, large }
+
+// MARK: - Environment（dismiss 用）
+
+public struct DismissAction {
+    public func callAsFunction() {}
+}
+
+public struct EnvironmentValues {
+    public var dismiss: DismissAction { DismissAction() }
+}
+
+@propertyWrapper
+public struct Environment<Value> {
+    public var wrappedValue: Value
+    public init(_ keyPath: KeyPath<EnvironmentValues, Value>) {
+        wrappedValue = EnvironmentValues()[keyPath: keyPath]
+    }
+}
+
+// contentShape 的 Shape 约束 + PresentationDetent 的 Hashable（校准页修饰符需要）
+public protocol Shape {}
+
+extension PresentationDetent: Hashable {
+    public static func == (lhs: PresentationDetent, rhs: PresentationDetent) -> Bool { true }
+    public func hash(into hasher: inout Hasher) {}
+}
+
+// MARK: - 形状（校准页用）
+
+public struct Rectangle: Shape { public init() {} }
+public struct RoundedRectangle: Shape {
+    public var cornerRadius: CGFloat
+    public init(cornerRadius: CGFloat) { self.cornerRadius = cornerRadius }
+    public init(cornerSize: CGSize) { cornerRadius = cornerSize.width }
+}
+
+extension Color {
+    public func ignoresSafeArea(_ edges: Edge.Set = .all) -> AnyView { AnyView(self) }
+}
+
+extension Text {
+    public func multilineTextAlignment(_ alignment: TextAlignment) -> AnyView { AnyView(self) }
+}
+
+public enum TextAlignment { case leading, center, trailing }
+
+// Text 专属修饰符（优先于 View 扩展，避免 AnyView 丢掉 Text 类型）
+extension Text {
+    public func font(_ font: Font?) -> Text { self }
+    public func foregroundColor<S: ShapeStyle>(_ style: S) -> Text { self }
+    public func foregroundStyle<S: ShapeStyle>(_ style: S) -> Text { self }
+    public func bold() -> Text { self }
 }

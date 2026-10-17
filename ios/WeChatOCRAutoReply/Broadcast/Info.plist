@@ -40,5 +40,7 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>自动发送的待发队列经本机传递（越狱模式下与 zxtouch 服务同在本机）。</string>
 </dict>
 </plist>

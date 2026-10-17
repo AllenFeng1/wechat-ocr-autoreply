@@ -6,6 +6,7 @@ import Foundation
 public enum SharedStore {
     private static let messagesFile = "messages.json"
     private static let repliesFile = "replies.json"
+    private static let pendingFile = "pending_sends.json"
     private static let signalKey = "shared_changed_at"
 
     private static var defaults: UserDefaults? {
@@ -49,6 +50,22 @@ public enum SharedStore {
 
     public static func loadReplies() -> [ReplySuggestion] {
         read([ReplySuggestion].self, from: repliesFile) ?? []
+    }
+
+    // MARK: 待自动发送（录屏扩展写，主 App 的 AutoSendEngine 消费）
+
+    public static func savePendingSends(_ list: [PendingSendItem]) {
+        write(list, to: pendingFile)
+        notifyChanged()
+    }
+
+    public static func loadPendingSends() -> [PendingSendItem] {
+        read([PendingSendItem].self, from: pendingFile) ?? []
+    }
+
+    public static func clearPendingSends() {
+        write([PendingSendItem](), to: pendingFile)
+        notifyChanged()
     }
 
     // MARK: 变更信号

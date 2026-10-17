@@ -54,6 +54,12 @@ public final class UIApplication {
     public func open(_ url: URL) {}
 }
 
+public final class UIScreen {
+    public static let main = UIScreen()
+    public init() {}
+    public var bounds: CGRect { CGRect(x: 0, y: 0, width: 390, height: 844) }
+}
+
 public enum UIKeyboardType: Int {
     case `default`
     case asciiCapable

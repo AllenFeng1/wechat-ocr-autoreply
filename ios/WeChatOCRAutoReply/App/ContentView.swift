@@ -208,6 +208,8 @@ struct ReplyCard: View {
 
 struct SettingsView: View {
     @ObservedObject var store: MessageStore
+    @State private var showCalibration = false
+    @State private var touchServiceMsg = ""
 
     var body: some View {
         NavigationStack {
@@ -293,6 +295,44 @@ struct SettingsView: View {
                     )
                 }
 
+                Section {
+                    Toggle("启用自动发送（全自动）", isOn: $store.config.autoSendEnabled)
+                    HStack {
+                        Text("zxtouch 服务")
+                        Spacer()
+                        Button("测试连接") {
+                            store.testTouchService { _, msg in touchServiceMsg = msg }
+                        }
+                        .font(.caption)
+                    }
+                    if !touchServiceMsg.isEmpty {
+                        Text(touchServiceMsg).font(.caption)
+                    }
+                    HStack {
+                        Text("屏幕坐标")
+                        Spacer()
+                        Text(store.config.touchPoints.isCalibrated ? "已校准" : "未校准（默认估算值）")
+                            .font(.caption)
+                            .foregroundStyle(store.config.touchPoints.isCalibrated ? .green : .orange)
+                    }
+                    Button("校准输入框 / 发送键位置") { showCalibration = true }
+                    Stepper("随机延迟下限：\(String(format: "%.1f", store.config.autoSendDelayMin)) 秒",
+                            value: $store.config.autoSendDelayMin, in: 0.5...10, step: 0.5)
+                    Stepper("随机延迟上限：\(String(format: "%.1f", store.config.autoSendDelayMax)) 秒",
+                            value: $store.config.autoSendDelayMax, in: 0.5...15, step: 0.5)
+                    if store.autoSendRunning {
+                        Label(store.autoSendMessage, systemImage: "paperplane")
+                            .font(.caption)
+                    }
+                } header: {
+                    Text("自动发送（越狱路线）")
+                } footer: {
+                    Text("需要：已越狱 + Cydia 安装 zxtouch tweak + 允许本地网络访问。"
+                       + "流程：切微信到前台 → 点输入框 → 逐字输入回复 → 点发送。"
+                       + "关闭时维持「本地通知 + 人工粘贴」的半自动模式。")
+                        .font(.caption)
+                }
+
                 Section("会话白名单（逗号分隔，留空 = 不过滤）") {
                     TextField("张三, 李四", text: whitelistBinding)
                 }
@@ -306,6 +346,9 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("设置")
+            .sheet(isPresented: $showCalibration) {
+                CalibrationView(store: store)
+            }
         }
     }
 

@@ -38,5 +38,7 @@
 		<string>weixin</string>
 		<string>wechat</string>
 	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>自动发送需要连接本机的 zxtouch 服务（127.0.0.1:6000）来模拟点击微信输入框和发送键。不开启自动发送则不会连接。</string>
 </dict>
 </plist>

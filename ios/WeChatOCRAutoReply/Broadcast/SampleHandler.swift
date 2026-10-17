@@ -129,10 +129,19 @@ class SampleHandler: RPBroadcastSampleHandler {
         // ④ 回复写剪贴板（多行保留 \n，用户可在微信里逐条粘贴发送）
         UIPasteboard.general.string = result.reply
 
-        // ⑤ 本地通知：点开 App 可见完整回复；发送由人手动完成（防封号）
-        let preview = result.reply.replacingOccurrences(of: "\n", with: " / ")
-        notify(title: "「\(session)」回复已就绪",
-               body: preview + (result.note.isEmpty ? "" : "（\(result.note)）"))
+        if cfg.autoSendEnabled && cfg.touchPoints.isCalibrated {
+            // ⑤a 自动发送（越狱 + zxtouch）：递交给主 App 的 AutoSendEngine 执行。
+            //     主 App 不在前台/被杀时任务排队，恢复后补发；失败仍可走剪贴板手动粘贴。
+            PendingSendBus.post(PendingSendItem(session: session, reply: result.reply,
+                                                friendId: friendId))
+            notify(title: "「\(session)」正在自动发送",
+                   body: result.reply.replacingOccurrences(of: "\n", with: " / "))
+        } else {
+            // ⑤b 半自动：本地通知，点开 App 可见完整回复；发送由人手动完成（防封号）
+            let preview = result.reply.replacingOccurrences(of: "\n", with: " / ")
+            notify(title: "「\(session)」回复已就绪",
+                   body: preview + (result.note.isEmpty ? "" : "（\(result.note)）"))
+        }
 
         // ⑥ 控制台留痕
         record(session: session, friendId: friendId, reply: result.reply, note: result.note)
