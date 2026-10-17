@@ -34,7 +34,7 @@
 
 | 文件 | 变化 |
 |---|---|
-| `Broadcast/APIClient.swift` | **整个重写**为 `BackendClient`：login / listFriends / createFriend / generate（含第二轮补拍）/ reportOutcome / healthCheck。旧的 `/api/v1/analyze` 契约已废弃 |
+| `Shared/APIClient.swift` | **整个重写**为 `BackendClient`：login / listFriends / createFriend / generate（含第二轮补拍）/ reportOutcome / healthCheck。旧的 `/api/v1/analyze` 契约已废弃。注意：本文件在 `Shared/` 下，主 App 和录屏扩展都会编译它（两边都要用） |
 | `Broadcast/OCRPipeline.swift` | **重写**：Vision OCR 框 + 像素取色分类气泡（绿泡=自己、非绿高对比=对方、置中=系统提示、杂色=图片里的字）；会话名提取（最上一行最左文本，去群人数后缀）；时间戳/UI 噪声过滤；`incoming` = 末尾连续对方消息（\n 连接，同 PC `_tail_from_her`） |
 | `Broadcast/SampleHandler.swift` | 重写流程：解析 → 内容签名去重 → 白名单 → 解析好友 → generate → 剪贴板 + 通知 + 控制台 |
 | `Shared/SharedTypes.swift` | `AppConfig` 增加 `username/password/friendBindings`；新增 `FriendProfile`、`GenerateResult`、`ParsedLine`、`BubbleKind`；`ReplySuggestion` 增加 `friendId/outcome/note` 和多行 `lines` |
@@ -110,4 +110,4 @@
 ## 8. 与原参考服务器（server/）的关系
 
 `server/` 目录里的 FastAPI 参考实现（`/api/v1/analyze`）**已废弃**，仅作历史参考。
-真实后端是 MiraMate；如需改契约，只动 `Broadcast/APIClient.swift` 一个文件。
+真实后端是 MiraMate；如需改契约，只动 `Shared/APIClient.swift` 一个文件。

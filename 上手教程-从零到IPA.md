@@ -221,7 +221,7 @@ public static let `default` = AppConfig(
 iOS 端和后端的所有交互都收敛在**一个文件**里：
 
 ```
-ios/WeChatOCRAutoReply/Broadcast/APIClient.swift
+ios/WeChatOCRAutoReply/Shared/APIClient.swift
 ```
 
 **当前默认契约**：

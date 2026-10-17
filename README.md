@@ -53,16 +53,15 @@ wechat-ocr-autoreply/
 │   ├── project.yml
 │   ├── README.md              #   Mac 上搭建步骤
 │   └── WeChatOCRAutoReply/
-│       ├── Shared/            #   AppConfig / 好友绑定 / 共享存储
+│       ├── Shared/            #   AppConfig / 好友绑定 / 共享存储 / APIClient（★ 后端契约只在这一个文件，主 App 与扩展共用）
 │       ├── App/               #   主 App：登录、绑定、控制台
 │       └── Broadcast/         #   录屏扩展：OCR + 气泡分类 + generate + 通知
-│           └── APIClient.swift  ← ★ 后端契约只在这一个文件 ★
 └── 上手教程-从零到IPA.md       # Windows 用户出 IPA + 安装全流程
 ```
 
 ## 对接 AnamneChat 后端（v0.2）
 
-iOS 端与后端的所有交互都在 `ios/WeChatOCRAutoReply/Broadcast/APIClient.swift` 一个文件里：
+iOS 端与后端的所有交互都在 `ios/WeChatOCRAutoReply/Shared/APIClient.swift` 一个文件里（主 App 和录屏扩展共用，故放在 Shared）：
 
 | 接口 | 说明 |
 |---|---|

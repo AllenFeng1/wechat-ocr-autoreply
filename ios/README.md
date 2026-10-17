@@ -56,7 +56,7 @@ open WeChatOCRAutoReply.xcodeproj
 ## 3. 签名
 
 - 两个 target（WeChatOCRAutoReply / BroadcastExtension）都在 Xcode → Signing & Capabilities 里选你的 Team
-- Bundle ID 全局唯一：如果 `com.example.wechatocr` 被占用，在 `project.yml` 里改 `bundleIdPrefix` 和两处 `PRODUCT_BUNDLE_IDENTIFIER`，**同时**改 `Shared/ConfigStore.swift` 里的 `appGroupSuite`（两个 entitlements 文件也要同步）
+- Bundle ID 全局唯一：默认 `com.allenfeng1.wechatocr`（已按 GitHub 用户名定制，不会撞名）。如仍要改：`project.yml` 的 `bundleIdPrefix` + 两处 `PRODUCT_BUNDLE_IDENTIFIER`，**同时**改 `Shared/ConfigStore.swift` 里的 `appGroupId`（两个 entitlements 文件也要同步）
 
 ## 4. 运行
 
