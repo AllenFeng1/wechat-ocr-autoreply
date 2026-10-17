@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct ContentView: View {
     @StateObject private var store = MessageStore()
@@ -12,6 +13,10 @@ struct ContentView: View {
             SettingsView(store: store)
                 .tabItem {
                     Label("设置", systemImage: "gear")
+                }
+            DiagnosticsView(store: store)
+                .tabItem {
+                    Label("诊断", systemImage: "stethoscope")
                 }
         }
     }
@@ -339,5 +344,146 @@ struct SettingsView: View {
                     .filter { !$0.isEmpty }
             }
         )
+    }
+}
+
+// MARK: - 诊断（不开录屏，直接验证 OCR 解析与后端生成）
+
+struct DiagnosticsView: View {
+    @ObservedObject var store: MessageStore
+    @State private var pickerItem: PhotosPickerItem?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("① 选一张微信聊天截图") {
+                    PhotosPicker(selection: $pickerItem, matching: .images,
+                                 photoLibrary: .shared()) {
+                        Label("从相册选择截图", systemImage: "photo.on.rectangle.angled")
+                    }
+                    Text("挑一张对方最新消息在屏幕最下方的聊天截图，测出来最接近真实录屏效果。")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Section("② OCR 解析结果") {
+                    if store.diagLines.isEmpty {
+                        Text("还没解析，先选截图。")
+                            .foregroundColor(.secondary)
+                    } else {
+                        LabeledContent("会话名",
+                                       value: store.diagSession.isEmpty ? "（没识别到，可手填）" : store.diagSession)
+                        LabeledContent("对方消息",
+                                       value: store.diagIncoming.isEmpty ? "（没识别到，可手填）" : store.diagIncoming.replacingOccurrences(of: "\n", with: " ⏎ "))
+                        ForEach(Array(store.diagLines.enumerated()), id: \.offset) { _, line in
+                            HStack(alignment: .top, spacing: 6) {
+                                Text(kindLabel(line.kind))
+                                    .font(.caption2)
+                                    .frame(width: 24)
+                                    .padding(.vertical, 2)
+                                    .background(kindColor(line.kind).opacity(0.15))
+                                    .foregroundColor(kindColor(line.kind))
+                                    .cornerRadius(4)
+                                Text(line.text)
+                                    .font(.caption)
+                                Spacer(minLength: 0)
+                            }
+                        }
+                    }
+                }
+
+                Section("③ 测试后端生成") {
+                    TextField("会话名（可修改）", text: $store.diagSession)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    TextEditor(text: $store.diagIncoming)
+                        .frame(minHeight: 60)
+                        .font(.caption)
+                    Button {
+                        store.diagGenerate()
+                    } label: {
+                        if store.diagBusy {
+                            ProgressView()
+                        } else {
+                            Text("生成回复")
+                        }
+                    }
+                    .disabled(store.diagBusy)
+
+                    if !store.diagReply.isEmpty {
+                        if !store.diagNote.isEmpty {
+                            Text(store.diagNote)
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        }
+                        ForEach(Array(store.diagReply.components(separatedBy: "\n").enumerated()),
+                                id: \.offset) { _, line in
+                            if !line.trimmingCharacters(in: .whitespaces).isEmpty {
+                                HStack(alignment: .top) {
+                                    Text(line)
+                                        .font(.body)
+                                        .textSelection(.enabled)
+                                    Spacer()
+                                    Button {
+                                        UIPasteboard.general.string = line
+                                    } label: {
+                                        Image(systemName: "doc.on.doc")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.borderless)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Section("运行日志") {
+                    if store.diagLog.isEmpty {
+                        Text("暂无日志").foregroundColor(.secondary)
+                    } else {
+                        ForEach(Array(store.diagLog.enumerated()), id: \.offset) { _, line in
+                            Text(line)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("诊断")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("清空") { store.diagClear() }
+                }
+            }
+            .onChange(of: pickerItem) { item in
+                guard let item else { return }
+                Task {
+                    guard let data = try? await item.loadTransferable(type: Data.self),
+                          let image = UIImage(data: data) else {
+                        store.diagLogAdd("读图失败，换一张截图")
+                        return
+                    }
+                    store.diagTestImage(image)
+                }
+            }
+        }
+    }
+
+    private func kindLabel(_ k: BubbleKind) -> String {
+        switch k {
+        case .her: return "她"
+        case .me: return "我"
+        case .gray: return "灰"
+        case .image: return "图"
+        }
+    }
+
+    private func kindColor(_ k: BubbleKind) -> Color {
+        switch k {
+        case .her: return .blue
+        case .me: return .green
+        case .gray: return .gray
+        case .image: return .orange
+        }
     }
 }

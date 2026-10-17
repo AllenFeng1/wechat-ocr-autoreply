@@ -11,11 +11,22 @@ class SampleHandler: RPBroadcastSampleHandler {
     private let logger = Logger(subsystem: "com.allenfeng1.wechatocr.broadcast",
                                 category: "SampleHandler")
 
-    override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
+    /// 帧处理串行队列。ReplayKit 要求 processSampleBuffer 尽快返回，
+    /// 重活（OCR + 网络）全丢这里；上一帧没处理完就丢帧——
+    /// iOS 会杀掉“跟不上帧率”的广播扩展，表现就是用户看到的「直播已停止」。
+    private let workQueue = DispatchQueue(label: "wechatocr.ocr", qos: .userInitiated)
+    private var isBusy = false
+    private var frameCount = 0
+    private var dropCount = 0
+
+    override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
         os_log(.info, "WeChatOCR broadcast started")
         NotificationHelper.requestAuthorizationIfNeeded()
         pipeline.resetSignature()
         pipeline.minIntervalSeconds = max(1, store.loadForExtension().minIntervalSeconds)
+        isBusy = false
+        frameCount = 0
+        dropCount = 0
     }
 
     override func broadcastPaused() {
@@ -34,23 +45,40 @@ class SampleHandler: RPBroadcastSampleHandler {
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer,
                                       with sampleBufferType: RPSampleBufferType) {
         guard sampleBufferType == .video else { return }
+        frameCount += 1
+
+        // 丢帧保护：上一帧还在处理就跳过（等 OCR 的几秒里后续帧全丢，只保留最新节奏）
+        guard !isBusy else {
+            dropCount += 1
+            if dropCount % 60 == 1 {
+                os_log(.info, "busy, dropped \(dropCount, privacy: .public) / \(frameCount, privacy: .public)")
+            }
+            return
+        }
 
         let cfg = store.loadForExtension()
         guard cfg.enabled else { return }
 
-        guard let parsed = pipeline.parse(sampleBuffer: sampleBuffer) else { return }
+        workQueue.async { [weak self] in
+            guard let self else { return }
+            self.isBusy = true
+            defer { self.isBusy = false }
+            autoreleasepool {
+                guard let parsed = self.pipeline.parse(sampleBuffer: sampleBuffer) else { return }
 
-        let session = parsed.session
-        let incoming = parsed.incomingFromHer
-        guard !session.isEmpty, !incoming.isEmpty else { return }
+                let session = parsed.session
+                let incoming = parsed.incomingFromHer
+                guard !session.isEmpty, !incoming.isEmpty else { return }
 
-        // 白名单（会话名不在名单里就跳过；空 = 不过滤）
-        if !cfg.whitelist.isEmpty && !cfg.whitelist.contains(session) { return }
+                // 白名单（会话名不在名单里就跳过；空 = 不过滤）
+                if !cfg.whitelist.isEmpty && !cfg.whitelist.contains(session) { return }
 
-        // 内容没变就不重复上传（同一条消息只生成一次）
-        guard pipeline.isNewContent(session: session, incoming: incoming) else { return }
+                // 内容没变就不重复上传（同一条消息只生成一次）
+                guard self.pipeline.isNewContent(session: session, incoming: incoming) else { return }
 
-        handleNewMessage(session: session, incoming: incoming, cfg: cfg)
+                self.handleNewMessage(session: session, incoming: incoming, cfg: cfg)
+            }
+        }
     }
 
     // MARK: - 核心：新消息 → 后端 → 回复

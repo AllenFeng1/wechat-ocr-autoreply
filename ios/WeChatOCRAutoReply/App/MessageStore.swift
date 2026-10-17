@@ -1,4 +1,11 @@
 import Foundation
+import UIKit
+
+private let diagTimeFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "HH:mm:ss"
+    return f
+}()
 
 /// 主 App 的状态中枢：加载配置、轮询共享数据变化、提供操作。
 final class MessageStore: ObservableObject {
@@ -191,5 +198,106 @@ final class MessageStore: ObservableObject {
         SharedStore.saveMessages([])
         SharedStore.saveReplies([])
         reload()
+    }
+
+    // MARK: - 诊断（不开录屏，直接验证 OCR 解析 + 后端生成）
+
+    @Published var diagLines: [ParsedLine] = []
+    @Published var diagSession = ""
+    @Published var diagIncoming = ""
+    @Published var diagReply = ""
+    @Published var diagNote = ""
+    @Published var diagBusy = false
+    @Published var diagLog: [String] = []
+
+    func diagLogAdd(_ s: String) {
+        let line = "[\(diagTimeFormatter.string(from: Date()))] \(s)"
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.diagLog.insert(line, at: 0)
+            if self.diagLog.count > 100 { self.diagLog.removeLast() }
+        }
+    }
+
+    /// 拿一张微信聊天截图跑完整条 OCR 解析（会话名 + 她/我分类 + incoming 提取）
+    func diagTestImage(_ image: UIImage) {
+        diagLogAdd("开始解析截图（\(Int(image.size.width))×\(Int(image.size.height))）")
+        guard let cg = image.cgImage else {
+            diagLogAdd("取不到图片数据，换一张截图")
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let pipeline = OCRPipeline()
+            guard let r = pipeline.parse(image: cg) else {
+                self.diagLogAdd("OCR 没识别出文字：换一张更清晰的聊天截图")
+                return
+            }
+            let counts = Dictionary(grouping: r.lines, by: { $0.kind }).mapValues { $0.count }
+            DispatchQueue.main.async {
+                self.diagLines = r.lines
+                self.diagSession = r.session
+                self.diagIncoming = r.incomingFromHer
+                self.diagLogAdd("解析完成：她=\(counts[.her] ?? 0) 我=\(counts[.me] ?? 0) 灰=\(counts[.gray] ?? 0) 图=\(counts[.image] ?? 0)")
+                if r.session.isEmpty { self.diagLogAdd("⚠️ 会话名没识别到，可手动填（要和微信顶部一致）") }
+                if r.incomingFromHer.isEmpty { self.diagLogAdd("⚠️ 没提取到对方消息：确认截图里对方气泡在最底部几行") }
+            }
+        }
+    }
+
+    /// 用诊断页里的 会话名 + 对方消息 直接调后端生成（和录屏链路同一套代码）
+    func diagGenerate() {
+        guard !config.apiToken.isEmpty else {
+            diagLogAdd("还没登录：先去「设置」页登录 AnamneChat 并保存")
+            return
+        }
+        let session = diagSession.trimmingCharacters(in: .whitespacesAndNewlines)
+        let incoming = diagIncoming.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !session.isEmpty else { diagLogAdd("会话名是空的，先填一个"); return }
+        guard !incoming.isEmpty else { diagLogAdd("对方消息是空的，先填上要测试的内容"); return }
+
+        let friends = ConfigStore.shared.cachedFriends()
+        let fid = ConfigStore.shared.resolveFriendId(session: session, friends: friends)
+        guard fid > 0 else {
+            diagLogAdd("「\(session)」没绑定好友：去「设置 → 会话绑定」绑定，或用会话名新建档案")
+            return
+        }
+        diagBusy = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            do {
+                let r = try BackendClient(base: self.config.normalizedServerURL,
+                                          token: self.config.apiToken)
+                    .generate(friendId: fid, incoming: incoming)
+                DispatchQueue.main.async {
+                    self.diagReply = r.reply
+                    self.diagNote = r.note
+                    self.diagBusy = false
+                    self.diagLogAdd("✅ 生成成功（friend #\(fid)）")
+                }
+            } catch let e as BackendError {
+                DispatchQueue.main.async {
+                    self.diagBusy = false
+                    self.diagLogAdd("❌ 生成失败：\(e.message)")
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.diagBusy = false
+                    self.diagLogAdd("❌ 失败：\(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    func diagClear() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.diagLines = []
+            self.diagSession = ""
+            self.diagIncoming = ""
+            self.diagReply = ""
+            self.diagNote = ""
+            self.diagLog = []
+        }
     }
 }

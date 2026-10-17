@@ -53,9 +53,9 @@ wechat-ocr-autoreply/
 │   ├── project.yml
 │   ├── README.md              #   Mac 上搭建步骤
 │   └── WeChatOCRAutoReply/
-│       ├── Shared/            #   AppConfig / 好友绑定 / 共享存储 / APIClient（★ 后端契约只在这一个文件，主 App 与扩展共用）
-│       ├── App/               #   主 App：登录、绑定、控制台
-│       └── Broadcast/         #   录屏扩展：OCR + 气泡分类 + generate + 通知
+│       ├── Shared/            #   AppConfig / 好友绑定 / 共享存储 / APIClient / OCRPipeline（双端共用）
+│       ├── App/               #   主 App：登录、绑定、控制台、诊断页（截图测 OCR + 后端）
+│       └── Broadcast/         #   录屏扩展入口：帧调度（后台队列 + 丢帧保护）与通知
 └── 上手教程-从零到IPA.md       # Windows 用户出 IPA + 安装全流程
 ```
 

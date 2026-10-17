@@ -35,13 +35,13 @@
 | 文件 | 变化 |
 |---|---|
 | `Shared/APIClient.swift` | **整个重写**为 `BackendClient`：login / listFriends / createFriend / generate（含第二轮补拍）/ reportOutcome / healthCheck。旧的 `/api/v1/analyze` 契约已废弃。注意：本文件在 `Shared/` 下，主 App 和录屏扩展都会编译它（两边都要用） |
-| `Broadcast/OCRPipeline.swift` | **重写**：Vision OCR 框 + 像素取色分类气泡（绿泡=自己、非绿高对比=对方、置中=系统提示、杂色=图片里的字）；会话名提取（最上一行最左文本，去群人数后缀）；时间戳/UI 噪声过滤；`incoming` = 末尾连续对方消息（\n 连接，同 PC `_tail_from_her`） |
-| `Broadcast/SampleHandler.swift` | 重写流程：解析 → 内容签名去重 → 白名单 → 解析好友 → generate → 剪贴板 + 通知 + 控制台 |
+| `Shared/OCRPipeline.swift` | **重写**：Vision OCR 框 + 像素取色分类气泡（绿泡=自己、非绿高对比=对方、置中=系统提示、杂色=图片里的字）；会话名提取（最上一行最左文本，去群人数后缀）；时间戳/UI 噪声过滤；`incoming` = 末尾连续对方消息（\n 连接，同 PC `_tail_from_her`）。在 `Shared/` 下：录屏扩展和主 App「诊断」页共用。渲染缩到长边 ≤1024（录屏扩展 50MB 内存上限） |
+| `Broadcast/SampleHandler.swift` | 重写流程：解析 → 内容签名去重 → 白名单 → 解析好友 → generate → 剪贴板 + 通知 + 控制台。重活丢后台串行队列 + 丢帧保护（iOS 会杀掉跟不上帧率的广播扩展 = 「直播已停止」） |
 | `Shared/SharedTypes.swift` | `AppConfig` 增加 `username/password/friendBindings`；新增 `FriendProfile`、`GenerateResult`、`ParsedLine`、`BubbleKind`；`ReplySuggestion` 增加 `friendId/outcome/note` 和多行 `lines` |
 | `Shared/ConfigStore.swift` | 重写：配置三层通道（App Group → 命名剪贴板 → 代码默认值）+ 会话绑定表 + 好友缓存 |
 | `Shared/SharedStore.swift` | 适配新 ConfigStore；免费模式静默降级 |
-| `App/MessageStore.swift` | 增加 login / testConnection / refreshFriends / createAndBind / bind / unbind / reportOutcome |
-| `App/ContentView.swift` | 设置页：服务器地址、测试连接、用户名密码登录、好友刷新、**会话绑定**（下拉选择/新建/解绑）；控制台：多行回复卡片、单行复制、已发送/没发 outcome 按钮 |
+| `App/MessageStore.swift` | 增加 login / testConnection / refreshFriends / createAndBind / bind / unbind / reportOutcome；**诊断三件套**：diagTestImage（截图跑 OCR）/ diagGenerate（直接调后端）/ diagLog |
+| `App/ContentView.swift` | 设置页：服务器地址、测试连接、用户名密码登录、好友刷新、**会话绑定**（下拉选择/新建/解绑）；控制台：多行回复卡片、单行复制、已发送/没发 outcome 按钮；**诊断页**：相册截图 → OCR 解析结果（她/我/灰/图分类逐行显示）→ 改会话名/消息 → 直接生成回复，全程不用开录屏 |
 
 **端口/地址默认值**：`AppConfig.default.serverURL = https://chat.anamne.top`（HTTPS，无需 ATS 例外）。
 

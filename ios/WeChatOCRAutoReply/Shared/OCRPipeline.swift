@@ -69,6 +69,29 @@ final class OCRPipeline {
         // 每帧渲染一次 CGImage，所有框共用（全图渲染一次比逐框裁切更稳）
         guard let cgImage = renderCGImage(pixelBuffer: pixelBuffer) else { return nil }
 
+        return analyze(observations: observations, cgImage: cgImage)
+    }
+
+    /// 诊断入口：直接解析一张静态图（相册里的微信截图），不做节流。
+    /// 主 App「诊断」页用——不开录屏也能验证 OCR 解析 + 颜色分类是否工作。
+    func parse(image: CGImage) -> ScreenParse? {
+        var observations: [VNRecognizedTextObservation] = []
+        let handler = VNImageRequestHandler(cgImage: image, orientation: .up, options: [:])
+        do {
+            try handler.perform([request])
+            observations = request.results ?? []
+        } catch {
+            return nil
+        }
+        guard !observations.isEmpty else { return nil }
+        // 大图先缩到长边 1024 再做颜色采样：照片分辨率比录屏帧高，不缩会吃到几十 MB 内存
+        let scaled = downscaledImage(image, maxLongEdge: 1024) ?? image
+        return analyze(observations: observations, cgImage: scaled)
+    }
+
+    /// Vision 观察结果 + 采样图 → 分类后的行。两条入口（录屏帧 / 静态图）共用。
+    private func analyze(observations: [VNRecognizedTextObservation],
+                         cgImage: CGImage) -> ScreenParse? {
         var parsed: [ParsedLine] = []
         for obs in observations {
             guard let text = obs.topCandidates(1).first?.string,
@@ -85,6 +108,22 @@ final class OCRPipeline {
         let session = extractSession(from: parsed)
         let incoming = tailFromHer(parsed)
         return ScreenParse(session: session, lines: parsed, incomingFromHer: incoming)
+    }
+
+    /// 等比缩小图片（长边封顶）。录屏扩展内存上限约 50MB，全屏帧不缩会被系统杀掉。
+    private func downscaledImage(_ image: CGImage, maxLongEdge: CGFloat) -> CGImage? {
+        let longEdge = CGFloat(max(image.width, image.height))
+        guard longEdge > maxLongEdge else { return image }
+        let scale = maxLongEdge / longEdge
+        let w = Int((CGFloat(image.width) * scale).rounded())
+        let h = Int((CGFloat(image.height) * scale).rounded())
+        guard let cs = CGColorSpace(name: CGColorSpace.sRGB),
+              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: cs,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)
+        else { return nil }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return ctx.makeImage()
     }
 
     /// (会话, 对方消息) 签名：和上次一样就跳过（PC 端 seen 机制的简化版）
@@ -253,6 +292,14 @@ final class OCRPipeline {
 
     private func renderCGImage(pixelBuffer: CVPixelBuffer) -> CGImage? {
         let image = CIImage(cvPixelBuffer: pixelBuffer)
-        return ciContext.createCGImage(image, from: image.extent)
+        // 缩到长边 ≤1024：颜色采样不需要全分辨率（框是归一化的，缩不缩都能对上），
+        // 但全屏帧全尺寸渲染一张就是 12MB+，录屏扩展 50MB 上限扛不住几次
+        let longEdge = max(image.extent.width, image.extent.height)
+        let maxEdge: CGFloat = 1024
+        let scaled = longEdge > maxEdge
+            ? image.transformed(by: CGAffineTransform(scaleX: maxEdge / longEdge,
+                                                      y: maxEdge / longEdge))
+            : image
+        return ciContext.createCGImage(scaled, from: scaled.extent)
     }
 }
