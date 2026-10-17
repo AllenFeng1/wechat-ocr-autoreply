@@ -562,6 +562,9 @@ extension View {
     public func onTapGesture(count: Int = 1, perform: @escaping () -> Void) -> AnyView {
         AnyView(self)
     }
+    // 注意：带 coordinateSpace 的重载是 iOS 17.0+ 才有的（部署目标 16.0 不能用），
+    // 拿不准最低版本时务必查 Apple 文档——桩无法替你检查可用性。
+    @available(iOS 17.0, macOS 14.0, *)
     public func onTapGesture(count: Int = 1, coordinateSpace: CoordinateSpace,
                              perform: @escaping (CGPoint) -> Void) -> AnyView {
         AnyView(self)
@@ -670,4 +673,44 @@ extension Text {
     public func foregroundColor<S: ShapeStyle>(_ style: S) -> Text { self }
     public func foregroundStyle<S: ShapeStyle>(_ style: S) -> Text { self }
     public func bold() -> Text { self }
+}
+
+// MARK: - 手势（校准页：DragGesture 取点击位置，iOS 13+ 通用写法）
+//
+// 为什么不用 onTapGesture(coordinateSpace:perform:)：那是 iOS 17+ API，
+// 工程部署目标是 16.0，用了直接编译报错。DragGesture(minimumDistance: 0)
+// 从 iOS 13 起可用，onEnded 里拿 value.location，行为等价。
+
+public protocol Gesture {
+    associatedtype Value
+}
+
+extension Gesture {
+    public func onEnded(perform action: @escaping (Value) -> Void) -> Self { self }
+}
+
+public struct DragGestureValue {
+    public var location: CGPoint
+    public var startLocation: CGPoint
+    public var translation: CGSize
+    public init() {
+        location = .zero
+        startLocation = .zero
+        translation = .zero
+    }
+}
+
+public struct DragGesture: Gesture {
+    public typealias Value = DragGestureValue
+    public init(minimumDistance: CGFloat = 0, coordinateSpace: CoordinateSpace = .local) {}
+}
+
+// .gesture(_:) 修饰符（真实签名：func gesture<T: Gesture>(_ gesture: T, including: GestureMask = .all)）
+public enum GestureMask { case all, subviews, never }
+
+extension View {
+    public func gesture<T: Gesture>(_ gesture: T,
+                                    including mask: GestureMask = .all) -> AnyView {
+        AnyView(self)
+    }
 }

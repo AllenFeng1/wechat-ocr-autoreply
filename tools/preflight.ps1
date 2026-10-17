@@ -38,7 +38,7 @@ New-Item -ItemType Directory -Path $Out -Force | Out-Null
 
 # ---- 1. 编译桩模块 ----
 $Modules = @("CoreGraphics","CoreMedia","Combine","os","UIKit","Vision",
-             "CoreImage","ReplayKit","UserNotifications","SwiftUI","PhotosUI")
+             "CoreImage","ReplayKit","UserNotifications","SwiftUI","PhotosUI","Network")
 foreach ($m in $Modules) {
     & $Swiftc -emit-module -module-name $m -sdk $SwiftSdk -I $Out `
         -emit-module-path "$Out\$m.swiftmodule" "$Stubs\$m.swift"

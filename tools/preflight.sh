@@ -49,7 +49,7 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 
 # ---- 1. 编译桩模块（顺序即依赖顺序） -----------------------------------
-MODULES="CoreGraphics CoreMedia Combine os UIKit Vision CoreImage ReplayKit UserNotifications SwiftUI PhotosUI"
+MODULES="CoreGraphics CoreMedia Combine os UIKit Vision CoreImage ReplayKit UserNotifications SwiftUI PhotosUI Network"
 for m in $MODULES; do
   if ! "$SWIFTC" -emit-module -module-name "$m" -sdk "$SWIFT_SDK" -I "$OUT" \
        -emit-module-path "$OUT/$m.swiftmodule" "$STUBS/$m.swift" 2>&1; then

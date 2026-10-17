@@ -23,25 +23,32 @@ struct CalibrationView: View {
     var body: some View {
         ZStack {
             // 全屏点击捕获（记录归一化坐标）
+            // 注意：不能用 onTapGesture(coordinateSpace:perform:)——那是 iOS 17+ API，
+            // 本工程部署目标 16.0。DragGesture(minimumDistance: 0) 从 iOS 13 起可用，
+            // onEnded 的 value.location 就是点击位置，行为等价。
             GeometryReader { geo in
                 Color.black.opacity(0.85)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
-                    .onTapGesture(coordinateSpace: .global) { location in
-                        let point = CGPoint(
-                            x: min(max(location.x / geo.size.width, 0), 1),
-                            y: min(max(location.y / geo.size.height, 0), 1)
-                        )
-                        switch step {
-                        case 0:
-                            inputBox = point
-                            step = 1
-                        case 1:
-                            sendButton = point
-                            step = 2
-                        default: break
-                        }
-                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                            .onEnded { value in
+                                let location = value.location
+                                let point = CGPoint(
+                                    x: min(max(location.x / geo.size.width, 0), 1),
+                                    y: min(max(location.y / geo.size.height, 0), 1)
+                                )
+                                switch step {
+                                case 0:
+                                    inputBox = point
+                                    step = 1
+                                case 1:
+                                    sendButton = point
+                                    step = 2
+                                default: break
+                                }
+                            }
+                    )
             }
 
             // 说明卡片 + 操作按钮

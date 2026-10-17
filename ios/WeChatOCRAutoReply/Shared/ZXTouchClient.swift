@@ -52,7 +52,7 @@ public final class ZXTouchClient {
         guard !isConnected else { DispatchQueue.main.async { completion(true) }; return }
         let conn = NWConnection(
             host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!,
-            uses: .tcp)
+            using: .tcp)
         conn.stateUpdateHandler = { [weak self] state in
             switch state {
             case .ready:
