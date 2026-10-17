@@ -6,14 +6,17 @@ import UIKit
 // =====================================================================
 //  OCRPipeline：录屏帧 → 屏幕文本解析（会话名 + 她/我消息行）
 // =====================================================================
-//  移植自 PC 端 app/ocr.py 的判定逻辑：
+//  移植自 PC 端 app/ocr.py 的判定逻辑（阈值经真实微信截图校准，
+//  校准工具 tools/calibrate.py，样本见 2026-10-17 用户提供的 11 张截图）：
 //   - who_said()：按 OCR 框内**颜色**分类，不看 x 坐标
-//       绿底 → me（自己）；非绿且文字对底色对比度 ≥150 → her（对方）；
-//       颜色杂（>40 种）且众数占比 <45% → 图片/表情包里的字，丢；
-//       其余灰字（时间戳/系统提示/群昵称）→ gray，丢
-//   - read_title()：最靠上的一行、最左的文本 = 会话名（去群人数后缀）
+//       绿底 → me（自己，实测微信绿 RGB≈(167,229,121)）；
+//       近白底（亮度≥200 且通道极差<24）+ 文字对比度 ≥150 → her（对方）；
+//       颜色杂（>40 种）且众数占比 <45% → 图片/表情包，丢；
+//       其余（红包/转账彩色卡片、深色壁纸上的浅色系统提示）→ image，丢
+//   - read_title()：最靠上一行、**水平最接近中线**的文本 = 会话名
 //   - parse_time()：时间戳行（带 HH:MM）跳过
 //   - _centered()：水平居中的行 = 微信系统提示，跳过
+//   - 区域过滤：导航栏（top<0.09）和输入栏/键盘区（top>inputBarTop）不算消息
 //   - _tail_from_her()（engine.py）：末尾连续属于对方的消息，\n 连接
 // =====================================================================
 
@@ -92,6 +95,10 @@ final class OCRPipeline {
     /// Vision 观察结果 + 采样图 → 分类后的行。两条入口（录屏帧 / 静态图）共用。
     private func analyze(observations: [VNRecognizedTextObservation],
                          cgImage: CGImage) -> ScreenParse? {
+        // 输入栏/键盘区顶部 y（归一化）。微信布局：有键盘时输入栏在 ~0.79，
+        // 无键盘时在 ~0.90。该区域以下是自己的输入内容和键盘，永远不是对话消息。
+        let inputBarTop = inputBarTopY(cgImage)
+
         var parsed: [ParsedLine] = []
         for obs in observations {
             guard let text = obs.topCandidates(1).first?.string,
@@ -106,8 +113,57 @@ final class OCRPipeline {
         parsed.sort { $0.top < $1.top }
 
         let session = extractSession(from: parsed)
-        let incoming = tailFromHer(parsed)
+        let incoming = tailFromHer(parsed, inputBarTop: inputBarTop)
         return ScreenParse(session: session, lines: parsed, incomingFromHer: incoming)
+    }
+
+    // MARK: - 输入栏/键盘区域检测
+
+    /// 键盘是否弹出：看屏幕最底部（y 87%-99%）的浅色密度。
+    /// 键盘 = 浅灰按键(≈240) + 深色缝隙 + 字母，近白占比约 40%；
+    /// 无键盘时该区域是输入栏的白底，占比 60%+（实测 21928e 有键盘 39%，
+    /// 696221/6aef46 无键盘 65%）。
+    private func keyboardVisible(_ cgImage: CGImage) -> Bool {
+        guard let ratio = paleRatio(cgImage, yFrom: 0.87, yTo: 0.99) else { return false }
+        return ratio < 0.5
+    }
+
+    /// 输入栏/键盘区顶部的 y（归一化）。消息永远不会进入这个区域。
+    private func inputBarTopY(_ cgImage: CGImage) -> Double {
+        keyboardVisible(cgImage) ? 0.775 : 0.88
+    }
+
+    /// 区域近白像素占比（>235,235,235）。复用 sampleBox 的像素访问方式。
+    private func paleRatio(_ cgImage: CGImage, yFrom: Double, yTo: Double) -> Double? {
+        let w = cgImage.width, h = cgImage.height
+        let y0 = Int((yFrom * Double(h)).rounded()), y1 = Int((yTo * Double(h)).rounded())
+        guard y1 > y0, y0 >= 0, y1 <= h, w > 0 else { return nil }
+        guard let provider = cgImage.dataProvider,
+              let data = provider.data,
+              let ptr = CFDataGetBytePtr(data) else { return nil }
+        let bpp = cgImage.bitsPerPixel / 8
+        let rowBytes = cgImage.bytesPerRow
+        guard bpp == 4 else { return nil }
+        let littleEndian = cgImage.bitmapInfo.contains(.byteOrder16Little)
+            || cgImage.bitmapInfo.contains(.byteOrder32Little)
+        let rOff = littleEndian ? 2 : 0
+        let bOff = littleEndian ? 0 : 2
+        // 每 4 行采 1 行、每行每 4 像素采 1 个，够统计占比
+        var pale = 0, total = 0
+        var y = y0
+        while y < y1 {
+            var x = 0
+            while x < w {
+                let offset = y * rowBytes + x * bpp
+                let r = ptr[offset + rOff], g = ptr[offset + 1], b = ptr[offset + bOff]
+                if r > 235 && g > 235 && b > 235 { pale += 1 }
+                total += 1
+                x += 4
+            }
+            y += 4
+        }
+        guard total > 0 else { return nil }
+        return Double(pale) / Double(total)
     }
 
     /// 等比缩小图片（长边封顶）。录屏扩展内存上限约 50MB，全屏帧不缩会被系统杀掉。
@@ -147,11 +203,12 @@ final class OCRPipeline {
         }
         let candidates = lines.filter { $0.top >= 0.04 && !isStatusBarNoise($0.text) }
         guard let first = candidates.first else { return "" }
-        // 同一行（top 相差 <1.2%）里取最左的
+        // 同一行（top 相差 <1.2%）里取**水平最接近屏幕中线**的：
+        // 微信导航栏是 [返回|标题(居中)|更多]，取最左会命中返回箭头/未读角标（实测踩过）
         let row = candidates.filter { abs($0.top - first.top) < 0.012 }
-        let leftmost = row.min(by: { $0.centerX < $1.centerX }) ?? first
+        let centered = row.min(by: { abs($0.centerX - 0.5) < abs($1.centerX - 0.5) }) ?? first
         // 群聊 "(422)" / "（422）" 后缀去掉，只留名字当 key
-        var name = leftmost.text
+        var name = centered.text
         if let range = name.range(of: #"\s*[（(]\d+[)）]\s*$"#, options: .regularExpression) {
             name.removeSubrange(range)
         }
@@ -160,12 +217,16 @@ final class OCRPipeline {
 
     // MARK: - 末尾连续的对方消息（_tail_from_her 移植）
 
-    private func tailFromHer(_ lines: [ParsedLine]) -> String {
+    private func tailFromHer(_ lines: [ParsedLine], inputBarTop: Double) -> String {
         // 先过滤掉非消息行
         let messages = lines.filter { line in
             if line.kind != .her && line.kind != .me { return false }
             if isTimeStamp(line.text) { return false }
             if isUINoise(line.text) { return false }
+            // 导航栏（<0.09）：返回箭头 / 会话名 / 更多按钮 / 未读角标
+            if line.top < 0.09 { return false }
+            // 输入栏+键盘区（>inputBarTop）：自己正在输入的文字、键盘字母、候选词
+            if Double(line.top) > inputBarTop { return false }
             // 水平居中的行 = 微信系统提示（"对方已通过你的朋友验证请求"等）
             if abs(line.centerX - 0.5) <= 0.15 { return false }
             return true
@@ -184,24 +245,32 @@ final class OCRPipeline {
         text.range(of: #"^(.{0,12}?)\s*(\d{1,2}):(\d{2})\s*$"#, options: .regularExpression) != nil
     }
 
-    /// 弹窗按钮字（PC 端 _UI_NOISE）
+    /// 弹窗按钮字 / 导航栏符号（PC 端 _UI_NOISE + 实测截图补充）
     private func isUINoise(_ text: String) -> Bool {
-        let noise: Set<String> = ["開", "X", "×", "✕", "✖", "⊗", "关闭"]
+        let noise: Set<String> = ["開", "X", "×", "✕", "✖", "⊗", "关闭",
+                                  "…", "...", "‹", "›", "»", "«", ">", "<"]
         return noise.contains(text.trimmingCharacters(in: .whitespaces))
     }
 
     // MARK: - 颜色分类（who_said 移植）
 
     private func classify(cgImage: CGImage, box: CGRect, text: String) -> BubbleKind {
-        guard let stats = sampleBox(cgImage: cgImage, box: box) else { return .gray }
+        guard let stats = sampleBox(cgImage: cgImage, box: box) else { return .image }
         let bg = stats.bg
         // 图片/表情包里的字：颜色杂（>40 种）且众数占比 <45% → 丢
         if stats.kinds > 40 && stats.topRatio < 0.45 { return .image }
-        // 绿底 → 自己发的
+        // 绿底 → 自己发的（实测微信绿 RGB≈(167,229,121)，g-r=62 g-b=108）
         if bg.g > bg.r + 40 && bg.g > bg.b + 40 { return .me }
-        // 非绿且文字对底色对比度 ≥150 → 对方
-        if stats.maxContrast >= 150 { return .her }
-        return .gray
+        // her 气泡：底色近白（浅色气泡）+ 文字对比度高。
+        // 实测白气泡底色 (249,249,249)，深色字对比 172-205。
+        // 彩色卡片（红包米黄底 luminance≈174 / 转账卡）和深色壁纸上的
+        // 浅色系统提示（实测对比度 136-153，贴线翻车过）都不是近白底 → 归 image 丢弃
+        let spread = max(bg.r, bg.g, bg.b) - min(bg.r, bg.g, bg.b)
+        let isPaleBubble = bg.luminance >= 200 && spread < 24
+        if isPaleBubble {
+            return stats.maxContrast >= 150 ? .her : .gray
+        }
+        return .image
     }
 
     private struct BoxStats {
