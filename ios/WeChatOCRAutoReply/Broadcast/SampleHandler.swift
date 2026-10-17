@@ -51,7 +51,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         guard !isBusy else {
             dropCount += 1
             if dropCount % 60 == 1 {
-                os_log(.info, "busy, dropped \(dropCount, privacy: .public) / \(frameCount, privacy: .public)")
+                os_log(.info, "busy, dropped \(self.dropCount, privacy: .public) / \(self.frameCount, privacy: .public)")
             }
             return
         }

@@ -11,6 +11,7 @@
 
 - 第 0 步：准备 3 样东西
 - 第 1 步：把代码推到 GitHub
+- 第 1.5 步：推送前先在本地检查编译（preflight，省掉反复修错）
 - 第 2 步：云端构建出 IPA
 - 第 3 步：Windows 安装 AltStore 并装进 iPhone
 - 第 4 步：把 IPA 装进 iPhone
@@ -63,6 +64,43 @@ git push -u origin main
 ```
 
 > ⚠️ **注意**：推代码**不会**自动触发构建（workflow 只监听手动 Run workflow，因为自动触发无法选择账号类型，默认配置的 IPA 免费账号装不上）。构建一律在 Actions 页面手动触发，见第 2 步。
+
+---
+
+## 第 1.5 步：推送前，先在本地检查编译（重要，能省掉反复修错的来回）
+
+以前的工作流是「推 → CI 编译 → 失败 → 修 → 再推」，每打包一次都要来回修一两轮编译错误。现在仓库里带了一个**本地预检**工具，推送前先把两个 Xcode 目标（App + 录屏扩展）完整类型检查一遍，CI 失败应该从此成为罕见事件。
+
+### 一次性安装（约 1GB，只装一次）
+
+打开 PowerShell，执行：
+
+```powershell
+winget install --id Swift.Toolchain
+```
+
+这是 Swift 的 Windows 版编译器。装完不用管它，预检脚本会自己找到。
+
+### 每次推送前跑一次
+
+```powershell
+# 在项目根目录
+powershell -ExecutionPolicy Bypass -File tools\preflight.ps1
+```
+
+或者用 Git Bash：`bash tools/preflight.sh`
+
+看到这句话才能推：
+
+```
+✅ preflight 通过：两个目标均可编译，可以推送
+```
+
+有错误会列出 `文件:行:列` 和原因（和 Xcode 报错格式一致），非零退出码。修完再跑，直到全绿。
+
+> 这个检查不是"差不多看看"：它和 CI 是同一套 Swift 编译器，只是把 iOS SDK 的 API 形状在本地用「桩模块」复刻了出来（见 `tools/README.md`）。曾把 CI 报过的错误重新注入源码做反向验证，本地报出的文件、行号、列号、错误文字与 CI 日志逐字符一致。
+
+> 已知边界：它查不了真机运行行为（OCR 效果、录屏帧率、内存）和签名问题——这些仍然靠第 6.5 步的诊断页和 CI 日志。
 
 ---
 

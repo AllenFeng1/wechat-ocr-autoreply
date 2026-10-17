@@ -13,8 +13,15 @@ public enum SharedStore {
     }
 
     public static func containerURL() -> URL? {
-        FileManager.default.containerURL(
+        // containerURL(forSecurityApplicationGroupIdentifier:) 是 Apple 平台专有 API
+        // （Windows/Linux 的 corelibs Foundation 没有）——本地 preflight 检查时
+        // 走 #else 分支返回 nil（= App Group 不可用，与免费账号行为一致）。
+        #if os(iOS) || os(macOS) || os(watchOS) || os(tvOS) || os(visionOS)
+        return FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: ConfigStore.shared.appGroupId)
+        #else
+        return nil
+        #endif
     }
 
     /// App Group 是否可用（付费开发者账号）；免费账号为 false

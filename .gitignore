@@ -8,3 +8,6 @@ ios/*.xcarchive
 *.xcuserstate
 xcuserdata/
 .DS_Store
+
+# 本地 preflight 类型检查的中间产物
+build/

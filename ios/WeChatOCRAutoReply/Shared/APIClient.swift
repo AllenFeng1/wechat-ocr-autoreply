@@ -1,4 +1,9 @@
 import Foundation
+// Windows/Linux 的 Swift 把 URLSession/URLRequest 放在独立的 FoundationNetworking
+// 模块里；iOS/macOS 上 canImport 为 false，这行是空操作。
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 // =====================================================================
 //  AnamneChat（MiraMate）后端客户端 —— iOS 端唯一与后端对话的文件
