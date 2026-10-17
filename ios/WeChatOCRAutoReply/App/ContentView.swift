@@ -399,6 +399,14 @@ struct DiagnosticsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("录屏采集状态（扩展探针）") {
+                    ForEach(Array(store.broadcastStatusLines.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.caption)
+                            .foregroundStyle(line.hasPrefix("⚠️") ? .orange : .secondary)
+                    }
+                }
+
                 Section("① 选一张微信聊天截图") {
                     PhotosPicker(selection: $pickerItem, matching: .images,
                                  photoLibrary: .shared()) {

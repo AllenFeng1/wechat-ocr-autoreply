@@ -22,7 +22,15 @@ import UIKit
 
 final class OCRPipeline {
     private let request: VNRecognizeTextRequest
-    private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
+
+    /// 录屏帧喂给 Vision 前的长边上限。全分辨率（~1179×2556≈12MB/帧）跑
+    /// .accurate 识别，Vision 内部缓冲直接顶爆扩展 50MB 限额被 jetsam——
+    /// 表现就是「直播屏幕已停止：尝试开始无效的视频会话」。缩到 1600
+    /// （约 0.63x）后微信正文（15pt→~28px）识别率不变，内存降 3 倍以上。
+    private let ocrMaxEdge: CGFloat = 1600
+
+    /// CIContext 懒创建：扩展启动即建 GPU context 会拖慢/惊扰 setup 阶段
+    private lazy var ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
     /// 触发解析的节流（秒）：PC 端每帧都解析，iPhone省电优先 1 秒
     var minIntervalSeconds: Int
@@ -59,8 +67,13 @@ final class OCRPipeline {
 
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return nil }
 
+        // 先缩帧再 OCR：Vision 直接吃全分辨率 pixelBuffer 是扩展内存超限
+        // （50MB jetsam → "invalid video session"）的头号原因。
+        // 一张缩放图同时供 Vision 识别和颜色采样用（框是归一化坐标，不影响对齐）。
+        guard let cgImage = renderCGImage(pixelBuffer: pixelBuffer, maxEdge: ocrMaxEdge) else { return nil }
+
         var observations: [VNRecognizedTextObservation] = []
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
+        let handler = VNImageRequestHandler(cgImage: cgImage, orientation: .up, options: [:])
         do {
             try handler.perform([request])
             observations = request.results ?? []
@@ -68,9 +81,6 @@ final class OCRPipeline {
             return nil
         }
         guard !observations.isEmpty else { return nil }
-
-        // 每帧渲染一次 CGImage，所有框共用（全图渲染一次比逐框裁切更稳）
-        guard let cgImage = renderCGImage(pixelBuffer: pixelBuffer) else { return nil }
 
         return analyze(observations: observations, cgImage: cgImage)
     }
@@ -87,8 +97,8 @@ final class OCRPipeline {
             return nil
         }
         guard !observations.isEmpty else { return nil }
-        // 大图先缩到长边 1024 再做颜色采样：照片分辨率比录屏帧高，不缩会吃到几十 MB 内存
-        let scaled = downscaledImage(image, maxLongEdge: 1024) ?? image
+        // 大图先缩到长边 1600 再做颜色采样：照片分辨率比录屏帧高，不缩会吃到几十 MB 内存
+        let scaled = downscaledImage(image, maxLongEdge: 1600) ?? image
         return analyze(observations: observations, cgImage: scaled)
     }
 
@@ -359,12 +369,11 @@ final class OCRPipeline {
                         maxContrast: maxContrast)
     }
 
-    private func renderCGImage(pixelBuffer: CVPixelBuffer) -> CGImage? {
+    private func renderCGImage(pixelBuffer: CVPixelBuffer, maxEdge: CGFloat) -> CGImage? {
         let image = CIImage(cvPixelBuffer: pixelBuffer)
-        // 缩到长边 ≤1024：颜色采样不需要全分辨率（框是归一化的，缩不缩都能对上），
+        // 缩到长边 ≤ maxEdge：颜色采样不需要全分辨率（框是归一化的，缩不缩都能对上），
         // 但全屏帧全尺寸渲染一张就是 12MB+，录屏扩展 50MB 上限扛不住几次
         let longEdge = max(image.extent.width, image.extent.height)
-        let maxEdge: CGFloat = 1024
         let scaled = longEdge > maxEdge
             ? image.transformed(by: CGAffineTransform(scaleX: maxEdge / longEdge,
                                                       y: maxEdge / longEdge))

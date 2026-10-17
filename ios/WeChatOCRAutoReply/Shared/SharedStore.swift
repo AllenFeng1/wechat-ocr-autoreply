@@ -7,6 +7,7 @@ public enum SharedStore {
     private static let messagesFile = "messages.json"
     private static let repliesFile = "replies.json"
     private static let pendingFile = "pending_sends.json"
+    private static let heartbeatFile = "broadcast_heartbeat.json"
     private static let signalKey = "shared_changed_at"
 
     private static var defaults: UserDefaults? {
@@ -66,6 +67,17 @@ public enum SharedStore {
     public static func clearPendingSends() {
         write([PendingSendItem](), to: pendingFile)
         notifyChanged()
+    }
+
+    // MARK: 广播生命周期探针（录屏扩展写，主 App 诊断页读）
+
+    public static func saveHeartbeat(_ hb: BroadcastHeartbeat) {
+        write(hb, to: heartbeatFile)
+        notifyChanged()
+    }
+
+    public static func loadHeartbeat() -> BroadcastHeartbeat? {
+        read(BroadcastHeartbeat.self, from: heartbeatFile)
     }
 
     // MARK: 变更信号

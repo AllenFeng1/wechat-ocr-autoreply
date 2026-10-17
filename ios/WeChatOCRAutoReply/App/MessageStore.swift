@@ -44,8 +44,43 @@ final class MessageStore: ObservableObject {
                 self.lastSignal = signal
                 self.reload()
             }
+            self.broadcastHB = BroadcastHeartbeatBus.latest()
             self.drainPendingSends()
         }
+    }
+
+    // MARK: - 录屏扩展生命周期探针（诊断页用）
+
+    /// 扩展最近一次广播的探针数据；nil = 扩展从未写过（从没启动成功过）
+    @Published var broadcastHB: BroadcastHeartbeat?
+
+    /// 探针数据的人话解读（诊断页展示）
+    var broadcastStatusLines: [String] {
+        guard let hb = broadcastHB, let started = hb.startedAt else {
+            return ["扩展从未启动成功过 —— 如果刚在控制中心选了「WeChatOCR」开始直播，" +
+                    "大概率是扩展签名/权限问题（免费账号 IPA 需确认扩展被一起签名）",
+                    "也可能是 setup 阶段崩溃：去 设置→隐私与安全性→分析与改进→分析数据，" +
+                    "搜 Broadcast 看有没有崩溃报告"]
+        }
+        var lines: [String] = []
+        lines.append("扩展启动于 \(diagTimeFormatter.string(from: started))")
+        lines.append("已处理 \(hb.frames) 帧文字")
+        if let last = hb.lastFrameAt {
+            lines.append("最近识别到文字：\(diagTimeFormatter.string(from: last))")
+        } else if hb.frames == 0 {
+            lines.append("⚠️ 启动后一帧文字都没处理出来就停了 —— 典型的内存超限（50MB jetsam）" +
+                         "或 mediaservicesd 被重置；可在分析数据里搜 Broadcast 确认")
+        }
+        if let fin = hb.finishedAt {
+            lines.append("扩展自行结束于 \(diagTimeFormatter.string(from: fin))（正常停止）")
+        } else {
+            lines.append("⚠️ 没有正常结束记录 —— 这次是被系统杀掉的（你看到的" +
+                         "「直播屏幕已停止」就是它）")
+        }
+        if !hb.lastError.isEmpty {
+            lines.append("扩展侧最近错误：\(hb.lastError)")
+        }
+        return lines
     }
 
     // MARK: - 自动发送（越狱 + zxtouch）

@@ -10,7 +10,10 @@ import UIKit
 public final class ConfigStore {
     public static let shared = ConfigStore()
 
-    public let appGroupId = "group.allenfeng1.wechatocr"
+    // 必须与两个 entitlements 文件里的 com.apple.security.application-groups 一致
+    // （2026-10-17 修：曾经写成 group.allenfeng1.wechatocr，与 entitlements 的
+    //  group.com.allenfeng1.wechatocr 不一致 → App Group 静默失效，全靠剪贴板降级）
+    public let appGroupId = "group.com.allenfeng1.wechatocr"
     public let pasteboardName = "wechatocr.config.v1"
 
     private let configKey = "app_config.v2"

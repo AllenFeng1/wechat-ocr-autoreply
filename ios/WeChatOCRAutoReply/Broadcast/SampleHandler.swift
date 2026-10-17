@@ -19,14 +19,23 @@ class SampleHandler: RPBroadcastSampleHandler {
     private var frameCount = 0
     private var dropCount = 0
 
+    /// 生命周期探针：让主 App 诊断页能分清「扩展没启动 / 启动即死 / 跑一会儿才死」
+    private var heartbeat = BroadcastHeartbeat()
+    /// 探针落盘节流：每 20 帧或关键时刻写一次，别把 I/O 当事干
+    private var heartbeatFrames = 0
+
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
         os_log(.info, "WeChatOCR broadcast started")
+        heartbeat = BroadcastHeartbeat()
+        heartbeat.startedAt = Date()
+        BroadcastHeartbeatBus.publish(heartbeat)
         NotificationHelper.requestAuthorizationIfNeeded()
         pipeline.resetSignature()
         pipeline.minIntervalSeconds = max(1, store.loadForExtension().minIntervalSeconds)
         isBusy = false
         frameCount = 0
         dropCount = 0
+        heartbeatFrames = 0
     }
 
     override func broadcastPaused() {
@@ -39,6 +48,8 @@ class SampleHandler: RPBroadcastSampleHandler {
 
     override func broadcastFinished() {
         os_log(.info, "WeChatOCR broadcast finished")
+        heartbeat.finishedAt = Date()
+        BroadcastHeartbeatBus.publish(heartbeat)
         pipeline.resetSignature()
     }
 
@@ -65,6 +76,7 @@ class SampleHandler: RPBroadcastSampleHandler {
             defer { self.isBusy = false }
             autoreleasepool {
                 guard let parsed = self.pipeline.parse(sampleBuffer: sampleBuffer) else { return }
+                self.noteFrameParsed()
 
                 let session = parsed.session
                 let incoming = parsed.incomingFromHer
@@ -79,6 +91,24 @@ class SampleHandler: RPBroadcastSampleHandler {
                 self.handleNewMessage(session: session, incoming: incoming, cfg: cfg)
             }
         }
+    }
+
+    // MARK: - 探针
+
+    /// 每解析出一帧文字就记一次（每 20 帧落盘一次，平衡可观测性与 I/O）
+    private func noteFrameParsed() {
+        heartbeat.frames += 1
+        heartbeat.lastFrameAt = Date()
+        heartbeatFrames += 1
+        if heartbeatFrames % 20 == 1 {
+            BroadcastHeartbeatBus.publish(heartbeat)
+        }
+    }
+
+    /// 记一条错误到探针（诊断页可见；不含隐私内容）
+    private func noteError(_ message: String) {
+        heartbeat.lastError = message
+        BroadcastHeartbeatBus.publish(heartbeat)
     }
 
     // MARK: - 核心：新消息 → 后端 → 回复
@@ -116,10 +146,12 @@ class SampleHandler: RPBroadcastSampleHandler {
             result = try client.generate(friendId: friendId, incoming: incoming)
         } catch let e as BackendError {
             logger.error("generate failed: \(e.message, privacy: .public)")
+            noteError("生成失败：\(e.message)")
             notify(title: "「\(session)」生成失败", body: e.message)
             record(session: session, friendId: friendId, reply: "", note: e.message)
             return
         } catch {
+            noteError("生成失败：\(error.localizedDescription)")
             notify(title: "「\(session)」生成失败", body: error.localizedDescription)
             record(session: session, friendId: friendId, reply: "",
                    note: error.localizedDescription)
