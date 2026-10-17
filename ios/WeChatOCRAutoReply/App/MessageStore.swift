@@ -131,9 +131,11 @@ final class MessageStore: ObservableObject {
         reportOutcome(suggestion, action: "sent")
     }
 
-    /// 设置页「测试连接」：连一下 zxtouch 服务通不通，失败时带上可操作的原因
+    /// 设置页「测试连接」：连一下 zxtouch 服务通不通，失败时带上可操作的原因。
+    /// 超时给到 10s：iOS 首次本地网络授权弹窗需要时间给用户点「允许」，
+    /// 2s 会在用户反应之前就超时报错（2026-10-17 修）。
     func testTouchService(completion: @escaping (Bool, String) -> Void) {
-        ZXTouchClient.shared.connect { ok, msg in
+        ZXTouchClient.shared.connect(timeout: 10) { ok, msg in
             completion(ok, msg)
         }
     }

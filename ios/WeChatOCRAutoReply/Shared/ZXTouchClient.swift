@@ -84,12 +84,13 @@ public final class ZXTouchClient {
         }
         connection = conn
         conn.start(queue: queue)
-        // 超时兜底：本地网络权限被卡住时 connect 会挂住不返回
+        // 超时兜底：本地网络权限首次弹窗挂起时 connect 会挂住不返回
         queue.asyncAfter(deadline: .now() + timeout) { [weak self] in
             guard let self, !self.isConnected else { return }
             conn.cancel()
-            finish(false, "\(Int(timeout)) 秒超时。先确认 zxtouch tweak 已装并重启过手机；"
-                        + "再检查 设置 → WeChatOCR → 本地网络 是否为「开」")
+            finish(false, "\(Int(timeout)) 秒超时。若系统弹过「是否允许 WeChatOCR 查找并连接"
+                        + "本地网络设备」请选允许；再确认 ZXTouch App 在后台运行着，且"
+                        + " 设置 → WeChatOCR → 本地网络 为「开」")
         }
         #else
         DispatchQueue.main.async { completion(false, "非 iOS 平台，触摸模拟不可用") }

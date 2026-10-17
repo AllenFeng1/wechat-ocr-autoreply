@@ -69,7 +69,21 @@ public final class AutoSendEngine {
         }
         isRunning = true
         cancelled = false
-        run(pending: pending, config: config, lines: lines, index: 0)
+        // 先确保 zxtouch 连接：用户没在设置页点过「测试连接」时 connection 是 nil，
+        // 直接发指令会全部失败在「未连接」（2026-10-17 修：引擎以前自己不建连）
+        if client.isConnected {
+            run(pending: pending, config: config, lines: lines, index: 0)
+        } else {
+            client.connect(timeout: 5) { [weak self] ok, msg in
+                guard let self else { return }
+                if ok {
+                    self.run(pending: pending, config: config, lines: lines, index: 0)
+                } else {
+                    // 连不上：失败原因透出，上层退回「通知 + 人工粘贴」
+                    self.finish(.failed, msg)
+                }
+            }
+        }
         return true
     }
 
