@@ -49,12 +49,16 @@ ios/WeChatOCRAutoReply/{App,Shared}/*.swift ──┼─typecheck─▶ WeChatOC
 ios/WeChatOCRAutoReply/{Broadcast,Shared}/*.swift ─typecheck─▶ BroadcastExtension 目标
 ```
 
-**已验证与 CI 对齐**（两次反向验证）：
+**已验证与 CI 对齐**（三次反向验证）：
 1. 把 CI 日志里的错误（SampleHandler.swift:54 的 `self.` 缺失）重新注入源码，
    preflight 报出完全相同的 `文件:行:列` 和错误信息；
 2. 补 Network 桩后，preflight 立刻报出 CI 上那个 8 秒失败的真凶——
    `ZXTouchClient.swift:53:32: error: incorrect argument label in call
-   (have 'host:port:uses:', expected 'host:port:using:')`。
+   (have 'host:port:uses:', expected 'host:port:using:')`；
+3. 修完 `using:` 后 CI 又栽在 `conn.send(data, ...)`（真机 SDK 要求
+   `send(content:)` 标签）——因为桩自己写成了 `send(_:)`，本地反而"验证"了错误写法。
+   把桩改成 `send(content:)` 后 preflight 原地报错，与 CI 的
+   `incorrect labels (have: '(_:completion:)', expected: '(content:completion:)')` 一致。
 
 ### 桩模块的维护规则
 
@@ -88,7 +92,7 @@ ios/WeChatOCRAutoReply/{Broadcast,Shared}/*.swift ─typecheck─▶ BroadcastEx
 - Swift 6 严格并发是**警告**（项目是 Swift 5.9 模式）。APIClient 里有几处
   `mutation of captured var` 的 Sendable 警告，现在不阻塞，将来升级 Swift 6 时要处理。
 
-### ⚠️ 两个真实发生过的盲区（2026-10-17 连续两次 CI 失败后补的课）
+### ⚠️ 三个真实发生过的盲区（2026-10-17 连续三次 CI 失败后补的课）
 
 **1. `#if canImport(...)` 会把 iOS 代码整段藏起来**
 ZXTouchClient 的 TCP 实现整段包在 `#if canImport(Network)` 里，Windows 上
@@ -97,7 +101,15 @@ ZXTouchClient 的 TCP 实现整段包在 `#if canImport(Network)` 里，Windows 
 `tools/swift-stubs/Network.swift`，让 `canImport(Network)` 在预检时为真。
 以后凡是用 `#if canImport(X)` 包裹的平台代码，都要给 X 建桩，否则等于没检查。
 
-**2. API 可用性（availability）在 Windows 上无法检查**
+**2. 桩自己写错 = 给错误代码发通行证**
+`NWConnection.send` 的真实签名是 `send(content:...)`，桩却写成了 `send(_:)`，
+于是 `conn.send(data, ...)` 这种错误写法本地绿灯放行，到 CI 才翻车。
+**对策**：桩的每个签名都要和真机 SDK **逐字符一致**（尤其是首参标签），
+拿不准就以 CI 报错信息里的 `note:` 候选签名为准反哺桩；桩的注释里要写明
+这个签名是从哪来的。新增桩或改桩时，跑一次「故意写错 → preflight 必须报错」
+的反向验证，确认桩不是摆设。
+
+**3. API 可用性（availability）在 Windows 上无法检查**
 swiftc 没有 iOS 部署目标的概念，`@available(iOS 17.0, *)` 的桩 API 在
 Windows 上照用不报错。而本工程 `IPHONEOS_DEPLOYMENT_TARGET = 16.0`，
 用到 iOS 17 专属 API（如 `onTapGesture(count:coordinateSpace:perform:)`）

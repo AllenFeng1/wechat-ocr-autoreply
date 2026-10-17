@@ -176,7 +176,7 @@ public final class ZXTouchClient {
             return
         }
         let data = Data(message.utf8)
-        conn.send(data, completion: .contentProcessed { [weak self] error in
+        conn.send(content: data, completion: .contentProcessed { [weak self] error in
             if let error {
                 self?.isConnected = false
                 completion?(false, error.localizedDescription)

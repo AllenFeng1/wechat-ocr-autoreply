@@ -10,7 +10,7 @@
 //   init(to: NWEndpoint, using: NWParameters)
 //   func start(queue: DispatchQueue)
 //   var stateUpdateHandler: ((NWConnection.State) -> Void)?
-//   func send(_ content: Data?, contentContext: NWConnection.ContentContext = .defaultMessage,
+//   func send(content: Data?, contentContext: NWConnection.ContentContext = .defaultMessage,
 //             isComplete: Bool = true, completion: NWConnection.SendCompletion = .contentProcessed)
 //   func receive(minimumIncompleteLength: Int, maximumLength: Int,
 //                completion: (Data?, NWConnection.ContentContext?, Bool, NWError?) -> Void)
@@ -70,7 +70,11 @@ public final class NWConnection {
 
     public func cancel() {}
 
-    public func send(_ content: Data?,
+    // 注意：首参标签是 content:（不是 _）。2026-10-17 CI 翻车教训：
+    // 桩写成 send(_:) 时 conn.send(data,...) 本地能过、真机 SDK 报
+    // "incorrect labels (have: '(_:completion:)', expected: '(content:completion:)')"。
+    // 桩签名必须与真机 SDK 逐字符一致，否则等于没检。
+    public func send(content: Data?,
                      contentContext: NWConnection.ContentContext = .defaultMessage,
                      isComplete: Bool = true,
                      completion: NWConnection.SendCompletion) {}
