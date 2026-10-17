@@ -1,8 +1,11 @@
-# WeChat OCR Auto-Reply（iOS 原型 v0.1）
+# WeChat OCR Auto-Reply（iOS · 对接 AnamneChat 后端）
 
-非越狱的 iOS 微信 OCR 自动回复原型：**ReplayKit 抓屏 → Vision 中文 OCR → 你的后端生成回复 → 剪贴板 + 本地通知半自动发送**。
+非越狱的 iOS 微信 OCR 自动回复原型：**ReplayKit 抓屏 → Vision OCR + 气泡颜色分类 → AnamneChat（MiraMate）后端生成回复 → 剪贴板 + 本地通知半自动发送**。
 
-设计原则：不 hook、不注入、不走协议（防封号，见下）；发送端保持人工确认。
+设计原则：不 hook、不注入、不走协议（防封号）；发送端保持人工确认；功能与 PC 客户端对齐。
+
+> **v0.2 起对接真实后端**（https://chat.anamne.top）。契约、改动清单、绑定模型见 **[后端对接说明-AnamneChat.md](后端对接说明-AnamneChat.md)**。
+> `server/` 目录的 FastAPI 参考实现（`/api/v1/analyze`）已废弃，仅作历史参考。
 
 ## 架构
 
@@ -15,57 +18,61 @@
 │      ▼                                                        │
 │  SampleHandler.processSampleBuffer ── 1秒/帧节流               │
 │      ▼                                                        │
-│  Vision OCR（zh-Hans 准确模式）                                │
-│      ▼  文本没变则跳过                                          │
-│  POST 你的后端  {device_id, session, screen_text, captured_at} │
+│  Vision OCR（zh-Hans 准确模式）→ 气泡颜色分类（绿=自己/她=对方）   │
+│      ▼  会话名 + 末尾连续对方消息；内容签名去重                   │
 │      ▼                                                        │
-│  {action: "reply", reply: "..."}                              │
-│      ├─► App Group 共享存储（主 App 控制台展示）                 │
-│      ├─► UIPasteboard.general.string = reply                  │
-│      └─► 本地通知："已复制 → 打开微信粘贴发送"                   │
+│  会话名 → 好友绑定表 → 自动匹配 nickname/remark → friend_id     │
+│      ▼  未绑定则通知，不生成、不自动建档                          │
+│  POST /api/chat/{fid}/generate  {incoming, action:"auto"}      │
+│      ▼                                                        │
+│  {reply, group_id, emotion_detected, error?}                   │
+│      ├─► 剪贴板（多行 \n 保留，逐条粘贴发送）                     │
+│      ├─► 本地通知："回复已就绪"                                 │
+│      └─► App Group / 命名剪贴板 → 主 App 控制台                  │
 │                                                              │
-│  主 App：配置后端 / 消息流 / 一键复制 / 打开微信                  │
+│  主 App：登录 / 测试连接 / 好友刷新 / 会话绑定 / 控制台           │
 └──────────────────────────────────────────────────────────────┘
-                     │ HTTP
+                     │ HTTPS
                      ▼
-          ┌─────────────────────┐
-          │  你的现有后端         │  ◄── 本项目默认不强制自带服务端
-          │  （返回回复文本）      │      server/ 目录是参考实现 + mock
-          └─────────────────────┘
+          ┌─────────────────────────────┐
+          │  AnamneChat 后端             │
+          │  /api/auth/login            │
+          │  /api/friends               │
+          │  /api/chat/{fid}/generate   │  ◄── 人设/记忆/分条全在服务端
+          │  /api/chat/{fid}/outcome    │
+          └─────────────────────────────┘
 ```
 
 ## 目录
 
 ```
 wechat-ocr-autoreply/
-├── server/                    # 参考服务端（FastAPI + OpenAI 兼容 LLM）
-│   ├── main.py                #   /api/v1/analyze、/health、白名单/限频 API
-│   ├── llm.py                 #   LLMClient（默认 DeepSeek）+ MockLLM
-│   ├── rate_limiter.py        #   小时/天限额 + 最小间隔 + 活跃时段
-│   ├── config.py / models.py
-│   └── test_server.py         #   12 个用例，全部通过（python test_server.py）
-└── ios/                       # iOS 工程（XcodeGen）
-    ├── project.yml
-    ├── README.md              #   Mac 上搭建步骤
-    └── WeChatOCRAutoReply/
-        ├── Shared/            #   AppConfig / 共享存储（App Group）
-        ├── App/               #   主 App：设置、控制台、复制、打开微信
-        └── Broadcast/         #   录屏扩展：OCR + 上传 + 通知
-            └── APIClient.swift  ← ★ 对接你后端只改这一个文件 ★
+├── 后端对接说明-AnamneChat.md   # ★ 本次对接的契约 / 改动 / 绑定模型 / 排错
+├── server/                    # 参考服务端（已废弃，历史参考）
+├── ios/                       # iOS 工程（XcodeGen）
+│   ├── project.yml
+│   ├── README.md              #   Mac 上搭建步骤
+│   └── WeChatOCRAutoReply/
+│       ├── Shared/            #   AppConfig / 好友绑定 / 共享存储
+│       ├── App/               #   主 App：登录、绑定、控制台
+│       └── Broadcast/         #   录屏扩展：OCR + 气泡分类 + generate + 通知
+│           └── APIClient.swift  ← ★ 后端契约只在这一个文件 ★
+└── 上手教程-从零到IPA.md       # Windows 用户出 IPA + 安装全流程
 ```
 
-## 对接你现有的后端（重点）
+## 对接 AnamneChat 后端（v0.2）
 
-iOS 端与后端的契约集中在 `ios/WeChatOCRAutoReply/Broadcast/APIClient.swift` 一个文件里：
+iOS 端与后端的所有交互都在 `ios/WeChatOCRAutoReply/Broadcast/APIClient.swift` 一个文件里：
 
-| | 默认契约 |
+| 接口 | 说明 |
 |---|---|
-| 方法 | `POST {serverURL}{analyzePath}` |
-| 鉴权 | `Authorization: Bearer {token}`（token 可空） |
-| 请求 | `{"device_id", "session", "screen_text", "captured_at"}` |
-| 响应 | `{"action": "reply"\|"ignore", "reply": "...", "reason": "..."}` |
+| `POST /api/auth/login` | `{username, password}` → `{token}` |
+| `GET /api/friends` | 好友档案（Bearer） |
+| `POST /api/friends` | 新建档案（仅用户显式触发） |
+| `POST /api/chat/{fid}/generate` | **核心**：`{incoming, action:"auto"}` → `{reply, group_id, emotion_detected, error?}` |
+| `POST /api/chat/{fid}/outcome` | sent/edited/cancelled 回传 |
 
-如果你的后端接口不同，改 `AnalyzeResponseBody` 字段名 + `analyze()` 里的请求组装即可，其他文件不用动。服务器地址/路径/token 在主 App「设置」页可配，不用重新编译。
+服务器地址、账号密码都在 App 设置页可配，不用重新编译。完整契约与排错见 [后端对接说明-AnamneChat.md](后端对接说明-AnamneChat.md)。
 
 ## 快速开始
 
@@ -89,7 +96,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 cd ios && xcodegen generate && open WeChatOCRAutoReply.xcodeproj
 ```
 
-真机运行 → 设置里填后端地址 → 微信聊天界面 → 控制中心长按录屏选「WeChatOCR」→ 对方来消息自动出回复 → 复制 → 粘贴发送。
+真机运行 → 设置页登录后端 → 绑定会话 → 微信聊天界面 → 控制中心长按录屏选「WeChatOCR」→ 对方来消息自动出回复 → 复制 → 粘贴发送。
 
 ### 想要 IPA（装到 iPhone）
 

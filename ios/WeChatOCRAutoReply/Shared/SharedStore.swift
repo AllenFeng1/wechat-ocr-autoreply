@@ -2,13 +2,24 @@ import Foundation
 
 /// App Group 共享容器：录屏扩展写消息/回复，主 App 读并展示。
 /// 通过 UserDefaults 里的时间戳信号通知对方数据已变化。
+/// 免费账号模式（无 App Group）下所有操作静默跳过——主 App 走命名剪贴板收回复。
 public enum SharedStore {
     private static let messagesFile = "messages.json"
     private static let repliesFile = "replies.json"
     private static let signalKey = "shared_changed_at"
 
+    private static var defaults: UserDefaults? {
+        UserDefaults(suiteName: ConfigStore.shared.appGroupId)
+    }
+
     public static func containerURL() -> URL? {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: ConfigStore.appGroupSuite)
+        FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: ConfigStore.shared.appGroupId)
+    }
+
+    /// App Group 是否可用（付费开发者账号）；免费账号为 false
+    public static var isAvailable: Bool {
+        containerURL() != nil
     }
 
     // MARK: 消息
@@ -36,11 +47,11 @@ public enum SharedStore {
     // MARK: 变更信号
 
     public static func notifyChanged() {
-        ConfigStore.defaults.set(Date().timeIntervalSince1970, forKey: signalKey)
+        defaults?.set(Date().timeIntervalSince1970, forKey: signalKey)
     }
 
     public static var changedSignal: Double {
-        ConfigStore.defaults.double(forKey: signalKey)
+        defaults?.double(forKey: signalKey) ?? 0
     }
 
     // MARK: 私有
