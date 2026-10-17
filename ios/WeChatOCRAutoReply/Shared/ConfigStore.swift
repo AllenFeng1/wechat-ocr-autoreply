@@ -40,7 +40,7 @@ public final class ConfigStore {
         }
         // 同步一份到命名剪贴板，供免费账号模式下的扩展读取
         if let data = try? JSONEncoder().encode(cfg) {
-            UIPasteboard(name: pasteboardName, create: true)?.setData(
+            UIPasteboard(name: UIPasteboard.Name(rawValue: pasteboardName), create: true)?.setData(
                 data, forPasteboardType: "public.json")
         }
     }
@@ -52,7 +52,7 @@ public final class ConfigStore {
            let cfg = try? JSONDecoder().decode(AppConfig.self, from: data) {
             return cfg
         }
-        if let pb = UIPasteboard(name: pasteboardName, create: false),
+        if let pb = UIPasteboard(name: UIPasteboard.Name(rawValue: pasteboardName), create: false),
            let data = pb.data(forPasteboardType: "public.json"),
            let cfg = try? JSONDecoder().decode(AppConfig.self, from: data) {
             return cfg
@@ -149,7 +149,7 @@ public final class ConfigStore {
     /// 免费模式下扩展写不进 App Group：用命名剪贴板把新回复递给主 App
     public func publishReplyViaPasteboard(_ reply: ReplySuggestion) {
         guard let data = try? JSONEncoder().encode(reply) else { return }
-        UIPasteboard(name: pasteboardName + ".reply", create: true)?
+        UIPasteboard(name: UIPasteboard.Name(rawValue: pasteboardName + ".reply"), create: true)?
             .setData(data, forPasteboardType: "public.json")
     }
 }

@@ -62,7 +62,7 @@ public enum BackendError: Error, Equatable {
     }
 }
 
-public struct BackendClient {
+public final class BackendClient {
     public let base: String
     public var token: String
 
@@ -126,7 +126,8 @@ public struct BackendClient {
                       timeout: TimeInterval = 30, auth: Bool = true) throws -> Any {
         let data = try request(path, method: method, body: body, timeout: timeout, auth: auth)
         guard let obj = try? JSONSerialization.jsonObject(with: data) else {
-            throw BackendError.decode(String(data: data, encoding: .utf8)?.prefix(200) ?? "")
+            let snippet = String(String(data: data, encoding: .utf8)?.prefix(200) ?? "")
+            throw BackendError.decode(snippet)
         }
         return obj
     }
@@ -228,7 +229,8 @@ public struct BackendClient {
         let data = try request("/api/chat/\(friendId)/generate",
                                method: "POST", body: body, timeout: timeout)
         guard let r = try? JSONDecoder().decode(GenerateResult.self, from: data) else {
-            throw BackendError.decode(String(data: data, encoding: .utf8)?.prefix(200) ?? "")
+            let snippet = String(String(data: data, encoding: .utf8)?.prefix(200) ?? "")
+            throw BackendError.decode(snippet)
         }
         return r
     }

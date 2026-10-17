@@ -201,8 +201,8 @@ final class OCRPipeline {
         guard bpp == 4 else { return nil }
 
         // 字节序：CIContext 产出通常是 BGRA（小端 32bit）；按 bitmapInfo 判断，别猜
-        let littleEndian = cgImage.bitmapInfo.contains(.order16Little)
-            || cgImage.bitmapInfo.contains(.order32Little)
+        let littleEndian = cgImage.bitmapInfo.contains(.byteOrder16Little)
+            || cgImage.bitmapInfo.contains(.byteOrder32Little)
         let rOff = littleEndian ? 2 : 0
         let bOff = littleEndian ? 0 : 2
 
