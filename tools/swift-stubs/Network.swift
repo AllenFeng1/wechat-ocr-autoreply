@@ -40,8 +40,17 @@ public struct NWError: Error, Equatable {
 }
 
 public final class NWConnection {
+    // 对照真机 SDK：failed / waiting 带 NWError 关联值，cancelled 没有
+    // （2026-10-17 修：原来全写成无关联值 case，ZXTouchClient 的
+    //  case .failed(let error) 在桩上编译不过——反过来证明桩偏离真机会误报）
     public enum State: Equatable {
-        case setup, waiting, preparing, ready, failed, cancelled, invalid
+        case setup
+        case waiting(NWError)
+        case preparing
+        case ready
+        case failed(NWError)
+        case cancelled
+        case invalid
     }
 
     public enum SendCompletion {

@@ -131,11 +131,10 @@ final class MessageStore: ObservableObject {
         reportOutcome(suggestion, action: "sent")
     }
 
-    /// 设置页「测试触摸」：连一下 zxtouch 服务通不通
+    /// 设置页「测试连接」：连一下 zxtouch 服务通不通，失败时带上可操作的原因
     func testTouchService(completion: @escaping (Bool, String) -> Void) {
-        ZXTouchClient.shared.connect { ok in
-            completion(ok, ok ? "zxtouch 服务可用（127.0.0.1:6000）"
-                              : "连不上：请确认已安装 zxtouch tweak 且允许本地网络访问")
+        ZXTouchClient.shared.connect { ok, msg in
+            completion(ok, msg)
         }
     }
 

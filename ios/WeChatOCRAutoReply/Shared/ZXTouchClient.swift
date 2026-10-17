@@ -46,36 +46,53 @@ public final class ZXTouchClient {
 
     // MARK: - 连接
 
-    /// 连接并探测。completion 回主线程；ok=true 表示可用。
-    public func connect(timeout: Double = 2.0, completion: @escaping (Bool) -> Void) {
+    /// 连接并探测。completion(ok, 人话原因) 回主线程；ok=true 表示可用。
+    /// 失败时分两种：.failed（127.0.0.1 上通常是 ECONNREFUSED = tweak 没在监听）
+    /// 和超时（权限被卡住时 connect 挂住不返回）——排查动作完全不同，必须分开提示。
+    public func connect(timeout: Double = 2.0, completion: @escaping (Bool, String) -> Void) {
         #if canImport(Network)
-        guard !isConnected else { DispatchQueue.main.async { completion(true) }; return }
+        if isConnected {
+            DispatchQueue.main.async { completion(true, "zxtouch 服务可用（127.0.0.1:6000）") }
+            return
+        }
         let conn = NWConnection(
             host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!,
             using: .tcp)
+        // 只回调一次：failed / cancelled / 超时可能同时来
+        var finished = false
+        func finish(_ ok: Bool, _ reason: String) {
+            guard !finished else { return }
+            finished = true
+            DispatchQueue.main.async { completion(ok, reason) }
+        }
         conn.stateUpdateHandler = { [weak self] state in
             switch state {
             case .ready:
                 self?.isConnected = true
-                DispatchQueue.main.async { completion(true) }
-            case .failed, .cancelled:
+                finish(true, "zxtouch 服务可用（127.0.0.1:6000）")
+            case .failed(let error):
                 self?.isConnected = false
-                self?.connection = nil
-                DispatchQueue.main.async { completion(false) }
+                if self?.connection === conn { self?.connection = nil }
+                finish(false, "连不上：\(error.localizedDescription)。"
+                            + "127.0.0.1:6000 拒绝连接 = zxtouch tweak 没装上或没运行"
+                            + "（装完要注销/重启；免费 IPA 不会影响本机回环）")
+            case .cancelled:
+                self?.isConnected = false
+                finish(false, "连接被取消")
             default: break
             }
         }
         connection = conn
         conn.start(queue: queue)
-        // 超时兜底：没装 tweak 时 connect 会挂住
+        // 超时兜底：本地网络权限被卡住时 connect 会挂住不返回
         queue.asyncAfter(deadline: .now() + timeout) { [weak self] in
             guard let self, !self.isConnected else { return }
             conn.cancel()
-            self.connection = nil
-            DispatchQueue.main.async { completion(false) }
+            finish(false, "\(Int(timeout)) 秒超时。先确认 zxtouch tweak 已装并重启过手机；"
+                        + "再检查 设置 → WeChatOCR → 本地网络 是否为「开」")
         }
         #else
-        DispatchQueue.main.async { completion(false) }
+        DispatchQueue.main.async { completion(false, "非 iOS 平台，触摸模拟不可用") }
         #endif
     }
 
